@@ -2,20 +2,25 @@
 
 set -ex
 
-yes | iptb init -n 3 --type docker >/dev/null
+num_nodes="$1"
+[[ -z "$num_nodes" ]] && num_nodes=3
+
+yes | iptb init -n $num_nodes --type docker >/dev/null
 iptb start
 
-iptb connect 0 1
-iptb connect 0 2
-iptb connect 1 2
+for ((i=0; i < num_nodes; i++)); do
+    for ((j=i+1; j < num_nodes; j++)); do
+        iptb connect $i $j
+    done
+done
 
 # make a file with some text (TODO: way to do this without subshell?)
 iptb run 0 sh -c 'echo "hola, mundo" > file'
 # add file to ipfs, save cid
 cid=$(iptb run 0 ipfs add -q file | tr -d '\r')
 
-# get the file from other two nodes
-for i in {1..2}; do
+# have each of the other nodes request the file
+for ((i=1; i < num_nodes; i++)); do
     iptb run $i ipfs cat "$cid"
 done
 
@@ -24,7 +29,7 @@ echo -n "id," > results
 iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' >> results
 
 # gather stats for each node
-for i in {0..2}; do
+for ((i=0; i < num_nodes; i++)); do
     iptb run $i sh -c "ipfs id --format='<id>,'" >> results
     iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' >> results
 done
