@@ -3,8 +3,8 @@
 set -ex
 
 # find better way to handle this arg count check
-[ ! $# -eq 6 ] && echo 'missing args' && exit 1
-while getopts ":n:c:o:" opt; do
+#[ ! $# -eq 6 ] && echo 'missing args' && exit 1
+while getopts ":n:c:o:i" opt; do
     case $opt in
         n)
             [[ -z "$OPTARG" ]] && exit 1
@@ -18,7 +18,7 @@ while getopts ":n:c:o:" opt; do
             [[ -z "$OPTARG" ]] && exit 1
             results="$OPTARG"
             ;;
-        /?)
+        \?)
             echo "Invalid option: -$OPTARG" >&2
             exit 1
             ;;
@@ -52,11 +52,12 @@ for ((i=1; i < num_nodes; i++)); do
 done
 
 # get header for bitswap stats
-echo -n "id," > $results
+echo -n "num,id," > $results
 iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' >> $results
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
+    echo -n "$i," >> $results
     iptb run $i sh -c "ipfs id --format='<id>,'" >> $results
     iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' >> $results
 done
