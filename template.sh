@@ -52,12 +52,11 @@ for ((i=1; i < num_nodes; i++)); do
 done
 
 # get header for bitswap stats
-echo -n "num,id," > $results
+echo -n "id," > $results
 iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' >> $results
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
-    echo -n "$i," >> $results
     iptb run $i sh -c "ipfs id --format='<id>,'" >> $results
     iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' >> $results
 done
