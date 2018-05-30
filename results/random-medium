@@ -1,0 +1,4 @@
+id,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received,dl_time
+Qmdq1SKrta2oeFMLv9MUfduuDMbt1wCKS1PQgbwC49Feqh,0 / 256,0,10,0,2000512,0,0 B,0 keys,2,LOCAL
+QmWWFiEnyE2d1tE3of9LNYY43XchuCXDVRnSC8J5zEYkws,0 / 256,5,5,1000256,1000256,0,0 B,0 keys,2,0s
+QmRvhP7t3aQdEtZJRnATaQKs81cvLWmd9TedNXMZJ1FAi1,0 / 256,10,0,2000512,0,0,0 B,0 keys,2,0s

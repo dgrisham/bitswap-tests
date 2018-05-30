@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -ex
-
 # find better way to handle this arg count check
 #[ ! $# -eq 6 ] && echo 'missing args' && exit 1
 while getopts ":n:c:o:i" opt; do
@@ -41,24 +39,29 @@ for ((i=0; i < num_nodes; i++)); do
         iptb connect $i $j
     done
 done
-
+    
 iptb run 0 sh -c "$creation_cmd >file"
 # add file to ipfs, save cid
 cid=$(iptb run 0 ipfs add -q ./file | tr -d '\r')
 
+dl_times[0]='LOCAL'
 # have each of the other nodes request the file
 for ((i=1; i < num_nodes; i++)); do
-    iptb run $i ipfs cat "$cid"
+    out=$(iptb run $i ipfs get "$cid")
+    # save the file download time for this node
+    dl_times[$i]=$(echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev)
 done
 
 # get header for bitswap stats
 echo -n "id," > $results
-iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' >> $results
+iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' | tr '\n' ',' >> $results
+echo 'dl_time' >> $results
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
     iptb run $i sh -c "ipfs id --format='<id>,'" >> $results
-    iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' >> $results
+    iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> $results
+    echo ${dl_times[$i]} >> $results
 done
 
 # the following commented command should be able to grab bitswap stats and do

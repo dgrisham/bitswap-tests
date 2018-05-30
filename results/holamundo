@@ -1,4 +1,4 @@
-id,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received
-QmbAMCK7xyWdNJmCb45eL8av3gr2TsQkZ6w8VLRUxG2eM4,0 / 256,0,2,0,40,0,0 B,0 keys,2
-QmTH7VrytoVLYNhrsKkMdf7aF8sgR63WzVPdse9WJKoLCR,0 / 256,1,1,20,20,0,0 B,0 keys,2
-QmTWDDgCLL9x84dRNEtDgXtGeQDhBHa47eRebkq7gAuy1i,0 / 256,2,0,40,0,0,0 B,0 keys,2
+id,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received,dl_time
+QmUbRPBSaxEEvQjyggEuMd4gpGjJ3smfF5pUeCq53sTzBs,0 / 256,0,2,0,40,0,0 B,0 keys,2,LOCAL
+QmW1miNZmeLWJdQAaf18qmrZ3n3mLmvUygwqoJTV86TMCz,0 / 256,1,1,20,20,0,0 B,0 keys,2,0s
+QmeprebfEnNKV9m7LUA1jKco3EkJ3cCatEEt4v63TR42Df,0 / 256,2,0,40,0,0,0 B,0 keys,2,0s
