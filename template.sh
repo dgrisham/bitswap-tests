@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -ex
+
 # find better way to handle this arg count check
 #[ ! $# -eq 6 ] && echo 'missing args' && exit 1
 while getopts ":n:c:o:i" opt; do
@@ -39,7 +41,16 @@ for ((i=0; i < num_nodes; i++)); do
         iptb connect $i $j
     done
 done
-    
+
+# TODO: make this an option
+iptb set bandwidth 10 "[0-2]"
+# TODO: only do this when a flag is set
+for i in $(ls $IPTB_ROOT | grep '[0-9]'); do
+    newcfg=$(jq '.Experimental.BitswapStrategyEnabled=true' "$IPTB_ROOT/$i/config" |\
+            jq '.Experimental.BitswapStrategy="Identity"')
+    echo "$newcfg" >| "$IPTB_ROOT/$i/config"
+done
+
 iptb run 0 sh -c "$creation_cmd >file"
 # add file to ipfs, save cid
 cid=$(iptb run 0 ipfs add -q ./file | tr -d '\r')
