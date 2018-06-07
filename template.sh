@@ -4,7 +4,8 @@ set -ex
 
 # find better way to handle this arg count check
 #[ ! $# -eq 6 ] && echo 'missing args' && exit 1
-while getopts ":n:c:o:i" opt; do
+use_strategy=0
+while getopts ":n:c:o:b:s" opt; do
     case $opt in
         n)
             [[ -z "$OPTARG" ]] && exit 1
@@ -13,6 +14,13 @@ while getopts ":n:c:o:i" opt; do
         c)
             [[ -z "$OPTARG" ]] && exit 1
             creation_cmd="$OPTARG"
+            ;;
+        b)
+            [[ -z "$OPTARG" ]] && exit 1
+            bandwidth_dist="$OPTARG"
+            ;;
+        s)
+            use_strategy=1
             ;;
         o)
             [[ -z "$OPTARG" ]] && exit 1
@@ -42,14 +50,24 @@ for ((i=0; i < num_nodes; i++)); do
     done
 done
 
-# TODO: make this an option
-iptb set bandwidth 10 "[0-2]"
-# TODO: only do this when a flag is set
-for i in $(ls $IPTB_ROOT | grep '[0-9]'); do
-    newcfg=$(jq '.Experimental.BitswapStrategyEnabled=true' "$IPTB_ROOT/$i/config" |\
-            jq '.Experimental.BitswapStrategy="Identity"')
-    echo "$newcfg" >| "$IPTB_ROOT/$i/config"
-done
+num_bws=$(wc -w <<< $bandwidth_dist)
+if [[ $num_bws -eq 1 ]]; then
+    iptb set bandwidth $bandwidth_dist "[0-$((num_nodes-1))]"
+elif [[ $num_bws > 1 ]]; then
+    k=0
+    for bw in $bandwidth_dist; do
+        iptb set bandwidth $bw $k
+        ((++k))
+    done
+fi
+
+if [[ $use_strategy -eq 1 ]]; then
+    for i in $(ls $IPTB_ROOT | grep '[0-9]'); do
+        newcfg=$(jq '.Experimental.BitswapStrategyEnabled=true' "$IPTB_ROOT/$i/config" |\
+                jq '.Experimental.BitswapStrategy="Identity"')
+        echo "$newcfg" >| "$IPTB_ROOT/$i/config"
+    done
+fi
 
 iptb run 0 sh -c "$creation_cmd >file"
 # add file to ipfs, save cid
