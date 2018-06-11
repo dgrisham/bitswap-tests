@@ -62,11 +62,8 @@ elif [[ $num_bws > 1 ]]; then
 fi
 
 if [[ $use_strategy -eq 1 ]]; then
-    for i in $(ls $IPTB_ROOT | grep '[0-9]'); do
-        newcfg=$(jq '.Experimental.BitswapStrategyEnabled=true' "$IPTB_ROOT/$i/config" |\
-                jq '.Experimental.BitswapStrategy="Identity"')
-        echo "$newcfg" >| "$IPTB_ROOT/$i/config"
-    done
+    iptb for-each ipfs config --json -- Experimental.BitswapStrategyEnabled true
+    iptb for-each ipfs config --json -- Experimental.BitswapStrategy '"Identity"'
 fi
 
 iptb run 0 sh -c "$creation_cmd >file"
