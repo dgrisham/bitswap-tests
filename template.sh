@@ -79,13 +79,14 @@ for ((i=1; i < num_nodes; i++)); do
 done
 
 # get header for bitswap stats
-echo -n "id," > $results
+echo -n "peer," > $results
 iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' | tr '\n' ',' >> $results
 echo 'dl_time' >> $results
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
-    iptb run $i sh -c "ipfs id --format='<id>,'" >> $results
+    echo -n "$i," >> $results
+    #iptb run $i sh -c "ipfs id --format='<id>,'" >> $results
     iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> $results
     echo ${dl_times[$i]} >> $results
 done
