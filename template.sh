@@ -5,7 +5,7 @@ set -ex
 # find better way to handle this arg count check
 #[ ! $# -eq 6 ] && echo 'missing args' && exit 1
 use_strategy=0
-while getopts ":n:c:o:b:s" opt; do
+while getopts ":n:c:d:b:s" opt; do
     case $opt in
         n)
             [[ -z "$OPTARG" ]] && exit 1
@@ -22,9 +22,10 @@ while getopts ":n:c:o:b:s" opt; do
         s)
             use_strategy=1
             ;;
-        o)
+        d)
             [[ -z "$OPTARG" ]] && exit 1
-            results="$OPTARG"
+            results_dir="$OPTARG"
+            mkdir -p "$results_dir"
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -70,29 +71,43 @@ iptb run 0 sh -c "$creation_cmd >file"
 # add file to ipfs, save cid
 cid=$(iptb run 0 ipfs add -q ./file | tr -d '\r')
 
+for ((i=0; i < num_nodes; i++)); do
+    pids[$i]=$(iptb run $i ipfs id | jq .ID | sed 's/"//g')
+done
+
 dl_times[0]='LOCAL'
 # have each of the other nodes request the file
 for ((i=1; i < num_nodes; i++)); do
+    # collect ledger data while downloading file
+    touch "$results_dir/ledgers_$i"
+    stop=0
+    while [ $stop -eq 0 ]; do
+        # once termination signal is received, finish current iteration of outer loop then stop the loop
+        trap "stop=1" SIGTERM
+        for ((j=0; j < num_nodes; j++)); do
+            [[ $i == $j ]] && continue
+            iptb run $i -n ipfs bitswap ledger ${pids[j]} >> "$results_dir/ledgers_$i"
+        done
+    done &
+
     out=$(iptb run $i ipfs get "$cid")
-    # save the file download time for this node
+    kill -TERM %1
     dl_times[$i]=$(echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev)
+    # things get messy if we start the next iteration before the backgrounded loop finishes
+    wait %1
 done
 
 # get header for bitswap stats
-echo -n "peer," > $results
-iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' | tr '\n' ',' >> $results
-echo 'dl_time' >> $results
+echo -n "peer," > "$results_dir/aggregate"
+iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' | tr '\n' ',' >> "$results_dir/aggregate"
+echo 'dl_time' >> "$results_dir/aggregate"
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
-    echo -n "$i," >> $results
-    #iptb run $i sh -c "ipfs id --format='<id>,'" >> $results
-    iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> $results
-    echo ${dl_times[$i]} >> $results
+    echo -n "$i," >> "$results_dir/aggregate"
+    #iptb run $i sh -c "ipfs id --format='<id>,'" >> "$results_dir/aggregate"
+    iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "$results_dir/aggregate"
+    echo ${dl_times[$i]} >> "$results_dir/aggregate"
 done
-
-# the following commented command should be able to grab bitswap stats and do
-# the relevant string manipulation, all on the docker image. but it's gross
-#iptb for-each sh -c "ipfs id --format='<id>,' && ipfs bitswap stat | grep ':\|\[' | sed 's/.*\?: //' | sed 's/.*\?\[\(.*\?\)\]/\1/' | paste -sd ',' -" > $results
 
 iptb kill

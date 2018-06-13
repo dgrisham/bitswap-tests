@@ -1,4 +1,0 @@
-id,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received,dl_time
-QmTZQurH2B8vUJaHEdFvJ2pW4Vpa51geb4hKEwBkVDsvp4,0 / 256,0,64835,0,16897217098,0,0 B,0 keys,2,LOCAL
-Qmd6iAiWY3RjzXihvVV9siMzoVeu3swpPDYLUsyC2YuyAY,0 / 256,38370,26901,10002378450,7011423700,0,0 B,0 keys,2,3m1s
-QmSDgWvY9ezMby1LSmpxxJs4r25n24uVQyv3vJXRqbxaia,0 / 256,53366,0,13906262348,0,1666,430 MB,0 keys,2,4m10s
