@@ -62,7 +62,7 @@ elif [[ $num_bws > 1 ]]; then
         iptb set bandwidth $bw $k
         ((++k))
     done
-    results_prefix+="$(echo $bandwidth_dist | sed 's/ /-/g')-"
+    results_prefix+="$(echo $bandwidth_dist | sed 's/ /_/g')-"
 fi
 
 if [[ $use_strategy -eq 1 ]]; then
