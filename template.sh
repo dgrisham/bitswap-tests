@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -ex
+#set -ex
 
 # find better way to handle this arg count check
 #[ ! $# -eq 6 ] && echo 'missing args' && exit 1
@@ -51,15 +51,18 @@ for ((i=0; i < num_nodes; i++)); do
     done
 done
 
+results_prefix="$results_dir/"
 num_bws=$(wc -w <<< $bandwidth_dist)
 if [[ $num_bws -eq 1 ]]; then
     iptb set bandwidth $bandwidth_dist "[0-$((num_nodes-1))]"
+    results_prefix+="${bandwidth_dist}x${num_nodes}-"
 elif [[ $num_bws > 1 ]]; then
     k=0
     for bw in $bandwidth_dist; do
         iptb set bandwidth $bw $k
         ((++k))
     done
+    results_prefix+="$(echo $bandwidth_dist | sed 's/ /-/g')-"
 fi
 
 if [[ $use_strategy -eq 1 ]]; then
@@ -79,14 +82,16 @@ dl_times[0]='LOCAL'
 # have each of the other nodes request the file
 for ((i=1; i < num_nodes; i++)); do
     # collect ledger data while downloading file
-    touch "$results_dir/ledgers_$i"
+    ledger_file="${results_prefix}ledgers_$i"
+    [[ -f "$ledger_file" ]] && rm "$ledger_file"
+    touch "$ledger_file"
     stop=0
     while [ $stop -eq 0 ]; do
         # once termination signal is received, finish current iteration of outer loop then stop the loop
         trap "stop=1" SIGTERM
         for ((j=0; j < num_nodes; j++)); do
             [[ $i == $j ]] && continue
-            iptb run $i -n ipfs bitswap ledger ${pids[j]} >> "$results_dir/ledgers_$i"
+            iptb run $i -n ipfs bitswap ledger ${pids[j]} >> "${results_prefix}ledgers_$i"
         done
     done &
 
@@ -98,16 +103,16 @@ for ((i=1; i < num_nodes; i++)); do
 done
 
 # get header for bitswap stats
-echo -n "peer," > "$results_dir/aggregate"
-iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:)' | tr ' ' '_' | paste -sd ',' | tr '\n' ',' >> "$results_dir/aggregate"
-echo 'dl_time' >> "$results_dir/aggregate"
+echo -n "peer," > "${results_prefix}aggregate"
+iptb run 0 sh -c "ipfs bitswap stat" | grep -oP '(?<=\t).*(?=:| \[)' | tr ' ' '_' | paste -sd ',' | tr '\n' ',' >> "${results_prefix}aggregate"
+echo 'dl_time' >> "${results_prefix}aggregate"
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
-    echo -n "$i," >> "$results_dir/aggregate"
-    #iptb run $i sh -c "ipfs id --format='<id>,'" >> "$results_dir/aggregate"
-    iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "$results_dir/aggregate"
-    echo ${dl_times[$i]} >> "$results_dir/aggregate"
+    echo -n "$i," >> "${results_prefix}aggregate"
+    #iptb run $i sh -c "ipfs id --format='<id>,'" >> "${results_prefix}aggregate"
+    iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "${results_prefix}aggregate"
+    echo ${dl_times[$i]} >> "${results_prefix}aggregate"
 done
 
 iptb kill
