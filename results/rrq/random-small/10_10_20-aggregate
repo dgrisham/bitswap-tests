@@ -1,0 +1,4 @@
+peer,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received,wantlist,partners,dl_time
+0,0 / 256,0,752,0,194804586,0,0 B,0 keys,2,LOCAL
+1,0 / 256,386,385,100023873,99761715,0,0 B,0 keys,2,1m23s
+2,0 / 256,751,0,194542428,0,335,88 MB,0 keys,2,1m20s
