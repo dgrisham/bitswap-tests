@@ -17,7 +17,7 @@ while getopts ":n:c:d:b:s" opt; do
             ;;
         b)
             [[ -z "$OPTARG" ]] && exit 1
-            bandwidth_dist="$OPTARG"
+            bw_dist="$OPTARG"
             ;;
         s)
             use_strategy=1
@@ -52,17 +52,17 @@ for ((i=0; i < num_nodes; i++)); do
 done
 
 results_prefix="$results_dir/"
-num_bws=$(wc -w <<< $bandwidth_dist)
+num_bws=$(wc -w <<< $bw_dist)
 if [[ $num_bws -eq 1 ]]; then
-    iptb set bandwidth $bandwidth_dist "[0-$((num_nodes-1))]"
-    results_prefix+="${bandwidth_dist}x${num_nodes}-"
+    iptb set upload $bw_dist "[0-$((num_nodes-1))]"
+    results_prefix+="$bw_dist"$(printf "_$bw_dist%.0s" $(eval echo {1..$((num_nodes-1))}))
 elif [[ $num_bws > 1 ]]; then
     k=0
-    for bw in $bandwidth_dist; do
-        iptb set bandwidth $bw $k
+    for bw in $bw_dist; do
+        iptb set upload $bw $k
         ((++k))
     done
-    results_prefix+="$(echo $bandwidth_dist | sed 's/ /_/g')-"
+    results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
 if [[ $use_strategy -eq 1 ]]; then
