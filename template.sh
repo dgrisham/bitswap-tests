@@ -63,6 +63,8 @@ elif [[ $num_bws > 1 ]]; then
         ((++k))
     done
     results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
+else
+    ./set_rates.sh -n1 -u 500
 fi
 
 if [[ $use_strategy -eq 1 ]]; then
