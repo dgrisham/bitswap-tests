@@ -2,12 +2,14 @@
 
 set -ex
 
-ingress=0
-egress=0
-while getopts ":n:u:d:" opt; do
+init=0
+while getopts ":in:u:d:" opt; do
     case $opt in
+        i)
+            init=1
+            ;;
         n)
-            num="$OPTARG"
+            num="$((OPTARG+1))"
             [[ -z "$num" ]] && num=1
             ;;
         u)
@@ -43,10 +45,12 @@ q=1514                  # HTB Quantum = 1500bytes IP + 14 bytes ethernet.
 quantum=300     # fq_codel quantum 300 gives a boost to interactive flows
             # At higher bandwidths (50Mbit+) don't bother
 
-[[ ! -z $(lsmod | grep ifb) ]] && sudo modprobe -r ifb
-sudo modprobe ifb
-sudo modprobe sch_fq_codel
-sudo modprobe act_mirred
+if [[ "$init" -eq 1 ]]; then
+    [[ ! -z $(lsmod | grep ifb) ]] && sudo modprobe -r ifb
+    sudo modprobe ifb numifbs=3
+    sudo modprobe sch_fq_codel
+    sudo modprobe act_mirred
+fi
 
 # ethtool -K $ext tso off gso off gro off # Also turn of gro on ALL interfaces
                                         # e.g ethtool -K eth1 gro off if you have eth1
