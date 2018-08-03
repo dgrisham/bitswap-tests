@@ -118,7 +118,7 @@ echo 'dl_time' >> "${results_prefix}aggregate"
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
-    echo -n "$i," >> "${results_prefix}aggregate"
+    echo -n "$(iptb get id $i)," >> "${results_prefix}aggregate"
     #iptb run $i sh -c "ipfs id --format='<id>,'" >> "${results_prefix}aggregate"
     iptb run $i sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "${results_prefix}aggregate"
     echo ${dl_times[$i]} >> "${results_prefix}aggregate"
