@@ -91,14 +91,16 @@ for ((i=1; i < num_nodes; i++)); do
     # collect ledger data while downloading file
     ledger_file="${results_prefix}ledgers_$i"
     [[ -f "$ledger_file" ]] && rm "$ledger_file"
-    touch "$ledger_file"
+    echo 'id,debt_ratio,exchanges,bytes_sent,bytes_received' > "$ledger_file"
     stop=0
     while [ $stop -eq 0 ]; do
         # once termination signal is received, finish current iteration of outer loop then stop the loop
         trap "stop=1" SIGTERM
         for ((j=0; j < num_nodes; j++)); do
             [[ $i == $j ]] && continue
-            iptb run $i -n ipfs bitswap ledger ${pids[j]} >> "${results_prefix}ledgers_$i"
+            ledger="$(iptb run $i -n ipfs bitswap ledger ${pids[j]})"
+            # echo "$ledger" >> "${results_prefix}ledgers_$i"
+            echo "$ledger" | awk '{print $NF}' | sed '1s/>//' | paste -sd ',' | tr -d '\r'|  sed 's/,$//' >> "${results_prefix}ledgers_$i"
         done
     done &
 
