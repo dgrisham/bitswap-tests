@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# topology: fully connected
+# user 0 uploads file, users 1 through n download consecutively (not at the same time)
+# results: aggregate stats; time series of ledgers for users 1 through N
+
 set -ex
 
 # find better way to handle this arg count check
@@ -82,7 +86,7 @@ iptb run 0 sh -c "$creation_cmd >file"
 cid=$(iptb run 0 ipfs add -q ./file | tr -d '\r')
 
 for ((i=0; i < num_nodes; i++)); do
-    pids[$i]=$(iptb run $i ipfs id | jq .ID | sed 's/"//g')
+    nodeIds[$i]=$(iptb get id $i)
 done
 
 dl_times[0]='LOCAL'
@@ -98,7 +102,7 @@ for ((i=1; i < num_nodes; i++)); do
         trap "stop=1" SIGTERM
         for ((j=0; j < num_nodes; j++)); do
             [[ $i == $j ]] && continue
-            ledger="$(iptb run $i -n ipfs bitswap ledger ${pids[j]})"
+            ledger="$(iptb run $i -n ipfs bitswap ledger ${nodeIds[j]})"
             # echo "$ledger" >> "${results_prefix}ledgers_$i"
             echo "$ledger" | awk '{print $NF}' | sed '1s/>//' | paste -sd ',' | tr -d '\r'|  sed 's/,$//' >> "${results_prefix}ledgers_$i"
         done

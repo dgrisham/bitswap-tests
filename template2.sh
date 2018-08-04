@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# topology: user 0 connected to users 1 and 2
+# all users upload unique files, user 0 downloads 1 and 2's files while
+# 1 and 2 download 0's
+# result: aggregate stats; time series of user 0's ledgers
+
 set -ex
 
 # find better way to handle this arg count check
@@ -76,7 +81,7 @@ fi
 
 # store node ids
 for ((i=0; i < num_nodes; i++)); do
-    nodeIds[$i]=$(iptb run $i ipfs id | jq .ID | sed 's/"//g')
+    nodeIds[$i]=$(iptb get id $i)
 done
 
 # each node uploads a file
@@ -89,13 +94,17 @@ done
 ledger_file="${results_prefix}ledgers_0"
 [[ -f "$ledger_file" ]] && rm "$ledger_file"
 touch "$ledger_file"
+echo 'id,debt_ratio,exchanges,bytes_sent,bytes_received' > "$ledger_file"
 stop=0
 until [[ "$stop" == 1 ]]; do
     # once termination signal is received, finish current iteration of outer loop then stop the loop
     trap "stop=1" SIGTERM
     for ((j=0; j < num_nodes; j++)); do
         [[ $j == 0 ]] && continue
-        iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]} >> "$ledger_file" || true
+        # iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]} >> "$ledger_file" || true
+        ledger="$(iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]})"
+        # echo "$ledger" >> "${results_prefix}ledgers_$i"
+        echo "$ledger" | awk '{print $NF}' | sed '1s/>//' | paste -sd ',' | tr -d '\r'|  sed 's/,$//' >> "$ledger_file"
     done
 done &
 pid_inf=($!)
@@ -105,8 +114,10 @@ dl_times0_tmp=$(mktemp)
 touch "$dl_times0_tmp"
 for ((i=1; i < num_nodes; i++)); do
     { out1=$(iptb run 0 -n ipfs get "${cids[$i]}");
-    out2=$(echo "$out1" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times0_tmp");
-    echo "out2: $out2";} &
+    echo "$out1" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times0_tmp";
+    # out2=$(echo "$out1" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times0_tmp");
+    # echo "out2: $out2"
+    } &
     pids+=($!)
 done
 
@@ -114,7 +125,8 @@ dl_times_tmp=$(mktemp)
 touch "$dl_times_tmp"
 for ((i=1; i < num_nodes; i++)); do
     { out=$(iptb run $i -n ipfs get "${cids[0]}");
-    echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times_tmp"; } &
+    echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times_tmp";
+    } &
     pids+=($!)
 done
 
@@ -137,7 +149,7 @@ echo 'dl_time(s)' >> "${results_prefix}aggregate"
 
 # gather stats for each node
 for ((i=0; i < num_nodes; i++)); do
-    echo -n "$i," >> "${results_prefix}aggregate"
+    echo -n "$(iptb get id $i)," >> "${results_prefix}aggregate"
     #iptb run $i sh -c "ipfs id --format='<id>,'" >> "${results_prefix}aggregate"
     iptb run "$i" sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "${results_prefix}aggregate"
     if [[ "$i" -eq 0 ]]; then
