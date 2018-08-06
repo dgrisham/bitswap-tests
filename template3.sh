@@ -68,7 +68,7 @@ if [[ $num_bws -eq 1 ]]; then
 elif [[ $num_bws > 1 ]]; then
     k=0
     for bw in $bw_dist; do
-        if [[ "$k" -eq 0 ]]; then
+        if [[ $k == 0 ]]; then
             [[ "$bw" != "-1" ]] && ./set_rates.sh -i -n$k -u$bw
         fi
         [[ "$bw" != "-1" ]] && ./set_rates.sh -n$k -u$bw
@@ -77,7 +77,7 @@ elif [[ $num_bws > 1 ]]; then
     results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
-if [[ $use_strategy -eq 1 ]]; then
+if [[ $use_strategy == 1 ]]; then
     iptb for-each ipfs config --json -- Experimental.BitswapStrategyEnabled true
     iptb for-each ipfs config --json -- Experimental.BitswapStrategy '"Identity"'
 fi
@@ -87,63 +87,70 @@ for ((i=0; i < num_nodes; i++)); do
     nodeIds[$i]=$(iptb get id $i)
 done
 
+declare -A cids
 # each node uploads a file
 for ((i=0; i < num_nodes; i++)); do
-    iptb run $i sh -c "$creation_cmd >file"
-    # store cids of uploaded files
-    cids[$i]=$(iptb run $i ipfs add -q ./file | tr -d '\r')
+    for ((j=0; i < num_nodes; i++)); do
+        [[ $i == $j ]] && continue
+        iptb run $i sh -c "$creation_cmd >file"
+        cids[$j,$i]=$(iptb run $i ipfs add -q ./file | tr -d '\r')
+    done
 done
 
-ledger_file="${results_prefix}ledgers_0"
-[[ -f "$ledger_file" ]] && rm "$ledger_file"
-touch "$ledger_file"
-echo 'id,debt_ratio,exchanges,bytes_sent,bytes_received' > "$ledger_file"
-stop=0
-until [[ "$stop" == 1 ]]; do
-    # once termination signal is received, finish current iteration of outer loop then stop the loop
-    trap "stop=1" SIGTERM
-    for ((j=0; j < num_nodes; j++)); do
-        [[ $j == 0 ]] && continue
-        # iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]} >> "$ledger_file" || true
-        ledger="$(iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]})"
-        # echo "$ledger" >> "${results_prefix}ledgers_$i"
-        echo "$ledger" | awk '{print $NF}' | sed '1s/>//' | paste -sd ',' | tr -d '\r'|  sed 's/,$//' >> "$ledger_file"
-    done
-done &
-pid_inf=($!)
+pid_infs=()
+for ((i=0; i < num_nodes; i++)); do
+    ledger_file="${results_prefix}ledgers_$i"
+    [[ -f "$ledger_file" ]] && rm "$ledger_file"
+    touch "$ledger_file"
+    echo 'id,debt_ratio,exchanges,bytes_sent,bytes_received' > "$ledger_file"
+    stop=0
+    until [[ "$stop" == 1 ]]; do
+        # once termination signal is received, finish current iteration of outer loop then stop the loop
+        trap "stop=1" SIGTERM
+        for ((j=0; j < num_nodes; j++)); do
+            [[ $j == $i ]] && continue
+            # iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]} >> "$ledger_file" || true
+            ledger="$(iptb run $i -n ipfs bitswap ledger ${nodeIds[j]})"
+            # echo "$ledger" >> "${results_prefix}ledgers_$i"
+            echo "$ledger" | awk '{print $NF}' | sed '1s/>//' | paste -sd ',' | tr -d '\r'|  sed 's/,$//' >> "$ledger_file"
+        done
+    done &
+    pid_infs+=($!)
+done
 
 pids=()
-dl_times0_tmp=$(mktemp)
-touch "$dl_times0_tmp"
-for ((i=1; i < num_nodes; i++)); do
-    { out1=$(iptb run 0 -n ipfs get "${cids[$i]}");
-    echo "$out1" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times0_tmp";
-    # out2=$(echo "$out1" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times0_tmp");
-    # echo "out2: $out2"
-    } &
-    pids+=($!)
-done
-
 dl_times_tmp=$(mktemp)
 touch "$dl_times_tmp"
-for ((i=1; i < num_nodes; i++)); do
-    { out=$(iptb run $i -n ipfs get "${cids[0]}");
-    echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times_tmp";
-    } &
-    pids+=($!)
+for ((i=0; i < num_nodes; i++)); do
+    for ((j=0; j < num_nodes; j++)); do
+        [[ $j == $i ]] && continue
+        { out=$(iptb run $i -n ipfs get "${cids[$i,$j]}");
+          echo -n "$i,$j:" >> "$dl_times_tmp"
+          echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times_tmp";
+        } &
+    done
+    pid_gets+=($!)
 done
 
 # wait for `ipfs get` loops to finish
-wait "${pids[@]}"
-# stop the infinite ledger loop
-kill -TERM $pid_inf
-wait $pid_inf
+wait "${pid_gets[@]}"
+# stop the infinite ledger loops
+kill -TERM "${pid_infs[@]}"
+wait "${pid_infs[@]}"
 
-readarray -t dl_times0 < "$dl_times0_tmp"
-readarray -t dl_times < "$dl_times_tmp"
 
-echo "dl_times0: ${dl_times0[*]}"
-echo "dl_times: ${dl_times[*]}"
+# TODO: read in dl_times_tmp based on new format
+# readarray -t dl_times < "$dl_times_tmp"
+
+re='([[:digit:]]+),([[:digit:]]+):([[:alnum:]])'
+declare -A dl_times
+while IFS= read -r line; do
+    if [[ $line =~ $re ]]; then
+        dl_times["${BASH_REMATCH[0]}","${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+    else
+        echo "error: dl_times_tmp line has wrong format: $line"
+    fi
+done <"$dl_times_tmp"
 
 # get header for bitswap stats
 echo -n "peer," > "${results_prefix}aggregate"
@@ -155,12 +162,14 @@ for ((i=0; i < num_nodes; i++)); do
     echo -n "$(iptb get id $i)," >> "${results_prefix}aggregate"
     #iptb run $i sh -c "ipfs id --format='<id>,'" >> "${results_prefix}aggregate"
     iptb run "$i" sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "${results_prefix}aggregate"
-    if [[ "$i" -eq 0 ]]; then
-        IFS=','
-        echo "\"${dl_times0[*]}\"" >> "${results_prefix}aggregate"
-        continue
-    fi
-    echo ${dl_times[$((i-1))]} >> "${results_prefix}aggregate"
- done
+    for ((j=0; i < num_nodes; i++)); do
+        [[ $j == $i ]] && continue
+        delim=','
+        if (( $j == $((num_nodes-1)) || ($j == $((num_nodes-2)) && $i == $((num_nodes-1))); then
+            delim='\n'
+        fi
+        echo -ne "${dl_times[$i,$j]}$delim" >> "${results_prefix}aggregate"
+    done
+done
 
 iptb kill
