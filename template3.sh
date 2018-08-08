@@ -90,7 +90,7 @@ done
 declare -A cids
 # each node uploads a file
 for ((i=0; i < num_nodes; i++)); do
-    for ((j=0; i < num_nodes; i++)); do
+    for ((j=0; j < num_nodes; j++)); do
         [[ $i == $j ]] && continue
         iptb run $i sh -c "$creation_cmd >file"
         cids[$j,$i]=$(iptb run $i ipfs add -q ./file | tr -d '\r')
@@ -118,15 +118,14 @@ for ((i=0; i < num_nodes; i++)); do
     pid_infs+=($!)
 done
 
-pids=()
+pid_gets=()
 dl_times_tmp=$(mktemp)
 touch "$dl_times_tmp"
 for ((i=0; i < num_nodes; i++)); do
     for ((j=0; j < num_nodes; j++)); do
         [[ $j == $i ]] && continue
         { out=$(iptb run $i -n ipfs get "${cids[$i,$j]}");
-          echo -n "$i,$j:" >> "$dl_times_tmp"
-          echo "$out" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> "$dl_times_tmp";
+          flock "$dl_times_tmp" sh -c "echo -n \"$i,$j\": >> $dl_times_tmp ; echo \"$out\" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> $dl_times_tmp";
         } &
     done
     pid_gets+=($!)
@@ -138,15 +137,11 @@ wait "${pid_gets[@]}"
 kill -TERM "${pid_infs[@]}"
 wait "${pid_infs[@]}"
 
-
-# TODO: read in dl_times_tmp based on new format
-# readarray -t dl_times < "$dl_times_tmp"
-
-re='([[:digit:]]+),([[:digit:]]+):([[:alnum:]])'
+re='([[:digit:]]+),([[:digit:]]+):([[:alnum:]]+)'
 declare -A dl_times
-while IFS= read -r line; do
+while IFS= read -r line _; do
     if [[ $line =~ $re ]]; then
-        dl_times["${BASH_REMATCH[0]}","${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+        dl_times["${BASH_REMATCH[1]}","${BASH_REMATCH[2]}"]="${BASH_REMATCH[3]}"
     else
         echo "error: dl_times_tmp line has wrong format: $line"
     fi
@@ -162,10 +157,10 @@ for ((i=0; i < num_nodes; i++)); do
     echo -n "$(iptb get id $i)," >> "${results_prefix}aggregate"
     #iptb run $i sh -c "ipfs id --format='<id>,'" >> "${results_prefix}aggregate"
     iptb run "$i" sh -c "ipfs bitswap stat" | grep -oP '(?<=: |\[)[0-9A-Za-z /]+(?=]|)' | paste -sd ',' | tr '\n' ',' >> "${results_prefix}aggregate"
-    for ((j=0; i < num_nodes; i++)); do
+    for ((j=0; j < num_nodes; j++)); do
         [[ $j == $i ]] && continue
         delim=','
-        if (( $j == $((num_nodes-1)) || ($j == $((num_nodes-2)) && $i == $((num_nodes-1))); then
+        if (( $j == $((num_nodes-1)) || ( $j == $((num_nodes-2)) && $i == $((num_nodes-1)) ) )); then
             delim='\n'
         fi
         echo -ne "${dl_times[$i,$j]}$delim" >> "${results_prefix}aggregate"
