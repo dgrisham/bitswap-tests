@@ -13,7 +13,7 @@ connect() {
 }
 
 add() {
-    declare -A cids
+    declare -Ag cids
     # each node uploads a file
     for ((i=0; i < num_nodes; i++)); do
         for ((j=0; j < num_nodes; j++)); do

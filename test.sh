@@ -1,9 +1,5 @@
 #!/bin/sh
 
-set -ex
-
-# find better way to handle this arg count check
-#[ ! $# -eq 6 ] && echo 'missing args' && exit 1
 use_strategy=0
 while getopts "t::n:c:d:b:r:s" opt; do
     case $opt in
