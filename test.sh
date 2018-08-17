@@ -33,7 +33,6 @@ while getopts "t::n:c:d:b:r:s" opt; do
         d)
             [[ -z "$OPTARG" ]] && exit 1
             results_dir="$OPTARG"
-            mkdir -p "$results_dir"
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -51,7 +50,7 @@ done
 shift $((OPTIND-1))
 
 # source the specified test
-source "./test-$test_num.sh"
+source "tests/test-$test_num.sh"
 
 yes | iptb init -n $num_nodes --type docker >/dev/null
 iptb start
@@ -73,26 +72,28 @@ if [[ $use_strategy -eq 1 ]]; then
     fi
 fi
 
-results_prefix="$results_dir/"
+results_prefix="results/$test_num/$results_dir/"
+mkdir -p "$results_prefix"
 num_bws=$(wc -w <<< $bw_dist)
 if [[ $num_bws -eq 1 ]]; then
-    ./set_rates.sh -i -n0 -u$bw_dist
+    scripts/set_rates.sh -i -n0 -u$bw_dist
     for ((k=1; k < num_nodes; k++)); do
-        ./set_rates.sh -n$k -u$bw_dist
+        scripts/set_rates.sh -n$k -u$bw_dist
     done
     results_prefix+="$bw_dist"$(printf "_$bw_dist%.0s" $(eval echo {1..$((num_nodes-1))}))
 elif [[ $num_bws > 1 ]]; then
     k=0
     for bw in $bw_dist; do
         if [[ "$k" -eq 0 ]]; then
-            [[ "$bw" != "-1" ]] && ./set_rates.sh -i -n$k -u$bw
+            [[ "$bw" != "-1" ]] && scripts/set_rates.sh -i -n$k -u$bw
         fi
-        [[ "$bw" != "-1" ]] && ./set_rates.sh -n$k -u$bw
+        [[ "$bw" != "-1" ]] && scripts/set_rates.sh -n$k -u$bw
         ((++k))
     done
     results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
+# save node ids for later use
 for ((i=0; i < num_nodes; i++)); do
     nodeIds[$i]=$(iptb get id $i)
 done

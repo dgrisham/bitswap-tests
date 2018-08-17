@@ -1,4 +1,0 @@
-peer,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received,dl_time
-0,0 / 256,0,72776,0,18969636876,0,0 B,0 keys,2,LOCAL
-1,0 / 256,38370,20750,10002378450,5408534090,0,0 B,0 keys,2,3m28s
-2,0 / 256,55156,0,14375792516,0,1866,485 MB,0 keys,2,4m17s

@@ -1,4 +1,0 @@
-peer,provides_buffer,blocks_received,blocks_sent,data_received,data_sent,dup_blocks_received,dup_data_received,wantlist,partners,dl_time(s)
-QmRPw7GTt3ipJSumcjpLUkSkwGPNebCYWGB2jaWZjXDmbF,0 / 256,7676,7676,2000475720,2000475720,0,0 B,0 keys,2,1m32s,1m31s
-QmNnP1WZ3KjU6upETEUnG1uTeeCxfvuP31abs1XbXfKefZ,0 / 256,7676,7676,2000475720,2000475720,0,0 B,0 keys,2,1m32s,1m28s
-QmSEJWmwy8az9rgmqhagemotGf8k32ddSP3vzCznewrhxD,0 / 256,7676,7676,2000475720,2000475720,0,0 B,0 keys,2,1m29s,1m29s
