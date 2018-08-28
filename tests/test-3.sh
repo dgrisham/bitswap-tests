@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # topology: fully connected
 # all users upload unique file, all other users download each file
@@ -25,57 +25,61 @@ add() {
 }
 
 request() {
-    pid_infs=()
+    # "pid_infs-$$"=()
     for ((i=0; i < num_nodes; i++)); do
         ledger_file="${results_prefix}ledgers_$i"
         [[ -f "$ledger_file" ]] && rm "$ledger_file"
         touch "$ledger_file"
         echo 'id,debt_ratio,exchanges,bytes_sent,bytes_received' > "$ledger_file"
-        stop=0
-        until [[ "$stop" == 1 ]]; do
+        parallel --id "pid_infs-$$" --jobs +1 'stop=0;
+            until [[ "$stop" == 1 ]]; do
             # once termination signal is received, finish current iteration of outer loop then stop the loop
             trap "stop=1" SIGTERM
             for ((j=0; j < num_nodes; j++)); do
-                [[ $j == $i ]] && continue
-                # iptb run 0 -n ipfs bitswap ledger ${nodeIds[j]} >> "$ledger_file" || true
-                ledger="$(iptb run $i -n ipfs bitswap ledger ${nodeIds[j]})"
-                # echo "$ledger" >> "${results_prefix}ledgers_$i"
-                echo "$ledger" | awk '{print $NF}' | sed '1s/>//' | paste -sd ',' | tr -d '\r'|  sed 's/,$//' >> "$ledger_file"
+                [[ $j == '"$i"' ]] && continue
+                ledger=$(iptb run '"$i"' -n ipfs bitswap ledger '"${nodeIds[j]}"')
+                echo "$ledger" | awk "{print $NF}" | sed "1s/>//" | paste -sd "," | tr -d "\r"|  sed "s/,$//" >> '"$ledger_file"'
             done
-        done &
-        pid_infs+=($!)
+            echo HI >file
+        done'
+        # "pid_infs-$$"+=($!)
     done
 
-    pid_gets=()
+    # "pid_gets-$$"=()
     dl_times_tmp=$(mktemp)
-    touch "$dl_times_tmp"
     for ((i=0; i < num_nodes; i++)); do
         for ((j=0; j < num_nodes; j++)); do
             [[ $j == $i ]] && continue
-            { out=$(iptb run $i -n ipfs get "${cids[$i,$j]}");
-              flock "$dl_times_tmp" sh -c "echo -n \"$i,$j\": >> $dl_times_tmp ; echo \"$out\" | tail -n1 | rev | cut -d' ' -f1 | cut -c 2- | rev >> $dl_times_tmp";
-            } &
-            pid_gets+=($!)
+            parallel --id "pid_gets-$$" --jobs +1 'flock '"$dl_times_tmp"' sh -c "echo -n '"$i,$j:"' >> '"$dl_times_tmp"' ; echo \"$(iptb run '"$i"' -n ipfs get '"${cids[$i,$j]}"')\" | tail -n1 | rev | cut -d\  -f1 | cut -c 2- | rev >> '"$dl_times_tmp"'"'
+            # parallel --id "pid_gets-$$" --jobs +1 'flock '"$dl_times_tmp"' bash -c '"'"'echo -n '"$i,$j"': >> '"$dl_times_tmp"' ; echo $(iptb run '"$i"' -n ipfs get '"${cids[$i,$j]}"') >> '"$dl_times_tmp""'"
         done
     done
 
-    # wait for `ipfs get` loops to finish
-    wait "${pid_gets[@]}"
+    parallel --id "pid_gets-$$" --jobs +1 --wait
+    # wait "${"pid_gets-$$"[@]}"
     # stop the infinite ledger loops
-    kill -TERM "${pid_infs[@]}"
-    wait "${pid_infs[@]}"
+    # for s in ~/.parallel/semaphores/id-"pid_infs-$$"/*@*; do
+    #     kill -TERM $(basename ${s%%@*})
+    # done
+    # kill -TERM "${"pid_infs-$$"[@]}"
+    # wait "${"pid_infs-$$"[@]}"
+    parallel --id "pid_infs-$$" --jobs +1 --halt now,done=0 --termseq TERM,500,TERM,500,KILL --wait
+    # parallel --id "pid_infs-$$" --halt now,done=1 --termseq TERM,500,TERM,500,KILL ':'
+    # parallel --id "pid_infs-$$" ':'
+    # parallel --id "pid_infs-$$" --wait
 }
 
 gather_results() {
     re='([[:digit:]]+),([[:digit:]]+):([[:alnum:]]+)'
+    cat "$dl_times_tmp"
     declare -A dl_times
-    while IFS= read -r line _; do
+    while IFS= read -u "$file_fd" -r line || [[ -n "$line" ]]; do
         if [[ $line =~ $re ]]; then
             dl_times["${BASH_REMATCH[1]}","${BASH_REMATCH[2]}"]="${BASH_REMATCH[3]}"
         else
             echo "error: dl_times_tmp line has wrong format: $line"
         fi
-    done <"$dl_times_tmp"
+    done {file_fd}<"$dl_times_tmp"
 
     # get header for bitswap stats
     echo -n "peer," > "${results_prefix}aggregate"

@@ -1,7 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 
-use_strategy=0
-while getopts "t::n:c:d:b:r:s" opt; do
+set -ex
+
+while getopts "t::n:c:d:b:r:s:" opt; do
     case $opt in
         t)
             [[ -z "$OPTARG" ]] && exit 1
@@ -24,7 +25,8 @@ while getopts "t::n:c:d:b:r:s" opt; do
             round_bursts="$OPTARG"
             ;;
         s)
-            use_strategy=1
+            [[ -z "$OPTARG" ]] && exit 1
+            strategy="$OPTARG"
             ;;
         d)
             [[ -z "$OPTARG" ]] && exit 1
@@ -51,32 +53,37 @@ source "tests/test-$test_num.sh"
 yes | iptb init -n $num_nodes --type docker >/dev/null
 iptb start
 
-if [[ $use_strategy -eq 1 ]]; then
+results_prefix="results/$test_num/$results_dir/"
+mkdir -p "$results_prefix"
+
+if [[ ! -z "$strategy" ]]; then
     iptb for-each ipfs config --json -- Experimental.BitswapStrategyEnabled true
-    iptb for-each ipfs config --json -- Experimental.BitswapStrategy '"Identity"'
+    iptb for-each ipfs config --json -- Experimental.BitswapStrategy "\"$strategy\""
+    results_prefix+="${strategy,,}-"
+
     num_rbs=$(wc -w <<< $round_bursts)
     if [[ $num_rbs -eq 1 ]]; then
         iptb for-each ipfs config --json -- Experimental.BitswapRRQRoundBurst $round_bursts
+        results_prefix+="rb_$round_bursts-"
     elif [[ $num_rbs -eq $num_nodes ]]; then
         k=0
         for rb in $round_bursts; do
             iptb run $k ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb
             ((++k))
         done
+        results_prefix+="rb_$(echo $round_bursts | sed 's/ /_/g')-"
     else
         echo "error: must specify an appropriate number of round lengths with -r"
     fi
 fi
 
-results_prefix="results/$test_num/$results_dir/"
-mkdir -p "$results_prefix"
 num_bws=$(wc -w <<< $bw_dist)
 if [[ $num_bws -eq 1 ]]; then
     scripts/set_rates.sh -i -n0 -u$bw_dist
     for ((k=1; k < num_nodes; k++)); do
         scripts/set_rates.sh -n$k -u$bw_dist
     done
-    results_prefix+="$bw_dist"$(printf "_$bw_dist%.0s" $(eval echo {1..$((num_nodes-1))}))
+    results_prefix+="bw_$bw_dist"$(printf "_$bw_dist%.0s" $(eval echo {1..$((num_nodes-1))}))
 elif [[ $num_bws > 1 ]]; then
     k=0
     for bw in $bw_dist; do
@@ -86,7 +93,7 @@ elif [[ $num_bws > 1 ]]; then
         [[ "$bw" != "-1" ]] && scripts/set_rates.sh -n$k -u$bw
         ((++k))
     done
-    results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
+    results_prefix+="bw_$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
 # save node ids for later use
