@@ -97,8 +97,9 @@ elif [[ $num_bws > 1 ]]; then
 fi
 
 # save node ids for later use
+declare -a nodeIds
 for ((i=0; i < num_nodes; i++)); do
-    nodeIds[$i]=$(iptb get id $i)
+    nodeIds[$i]="$(iptb get id $i)"
 done
 
 ### CONNECT NODES ###
