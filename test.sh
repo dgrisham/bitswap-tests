@@ -1,7 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 
-use_strategy=0
-while getopts "t::n:c:d:b:r:s" opt; do
+set -ex
+
+test_num=3
+while getopts "t::n:f:d:b:r:s:" opt; do
     case $opt in
         t)
             [[ -z "$OPTARG" ]] && exit 1
@@ -11,9 +13,9 @@ while getopts "t::n:c:d:b:r:s" opt; do
             [[ -z "$OPTARG" ]] && exit 1
             num_nodes="$OPTARG"
             ;;
-        c)
+        f)
             [[ -z "$OPTARG" ]] && exit 1
-            creation_cmd="$OPTARG"
+            file_cmd="$OPTARG"
             ;;
         b)
             [[ -z "$OPTARG" ]] && exit 1
@@ -21,10 +23,12 @@ while getopts "t::n:c:d:b:r:s" opt; do
             ;;
         r)
             [[ -z "$OPTARG" ]] && exit 1
+            echo "setting round bursts to: $OPTARG"
             round_bursts="$OPTARG"
             ;;
         s)
-            use_strategy=1
+            [[ -z "$OPTARG" ]] && exit 1
+            strategy="$OPTARG"
             ;;
         d)
             [[ -z "$OPTARG" ]] && exit 1
@@ -48,28 +52,40 @@ shift $((OPTIND-1))
 # source the specified test
 source "tests/test-$test_num.sh"
 
-yes | iptb init -n $num_nodes --type docker >/dev/null
-iptb start
+persistent() {
+    until $@; do :; done
+}
 
-if [[ $use_strategy -eq 1 ]]; then
-    iptb for-each ipfs config --json -- Experimental.BitswapStrategyEnabled true
-    iptb for-each ipfs config --json -- Experimental.BitswapStrategy '"Identity"'
+yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
+iptb start --wait
+persistent iptb connect
+
+results_prefix="results/$test_num/$results_dir/"
+mkdir -p "$results_prefix"
+
+if [[ ! -z "$strategy" ]]; then
+    iptb run -- ipfs config --json -- Experimental.BitswapStrategyEnabled true
+    iptb run -- ipfs config --json -- Experimental.BitswapStrategy "\"$strategy\""
+    results_prefix+="${strategy,,}-"
+
     num_rbs=$(wc -w <<< $round_bursts)
     if [[ $num_rbs -eq 1 ]]; then
-        iptb for-each ipfs config --json -- Experimental.BitswapRRQRoundBurst $round_bursts
+        iptb run -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $round_bursts
+        results_prefix+="rb_$round_bursts-"
     elif [[ $num_rbs -eq $num_nodes ]]; then
         k=0
         for rb in $round_bursts; do
             iptb run $k ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb
             ((++k))
         done
+        results_prefix+="rb_$(echo $round_bursts | sed 's/ /_/g')-"
     else
-        echo "error: must specify an appropriate number of round lengths with -r"
+        echo "$round_bursts"
+        echo "error: specified $num_rbs round lengths. should be 1 or $num_nodes"
+        exit 1
     fi
 fi
 
-results_prefix="results/$test_num/$results_dir/"
-mkdir -p "$results_prefix"
 num_bws=$(wc -w <<< $bw_dist)
 if [[ $num_bws -eq 1 ]]; then
     scripts/set_rates.sh -i -n0 -u$bw_dist
@@ -89,26 +105,44 @@ elif [[ $num_bws > 1 ]]; then
     results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
-# save node ids for later use
-for ((i=0; i < num_nodes; i++)); do
-    nodeIds[$i]=$(iptb get id $i)
+# start capturing logs
+
+for ((i=0; i< num_nodes; i++)); do
+    docker exec --detach $(iptb attr get $i container) sh -c "ipfs log tail >ipfs_log"
 done
 
 ### CONNECT NODES ###
 
-connect
+persistent iptb connect
 
 ### ADD FILES ###
 
-add
+declare -A cids
+# each node uploads a file
+for ((i=0; i < num_nodes; i++)); do
+    for ((j=0; j < num_nodes; j++)); do
+        [[ $i == $j ]] && continue
+        iptb run $i -- sh -c "$file_cmd >file"
+        cids[$j,$i]=$(iptb run $i -- sh -c "ipfs add -q file && rm file" | tail -n2)
+    done
+done
 
-### REQUEST FILES ###
+### REQUEST FILES, GATHER STATS ###
 
-request
+for ((i=0; i < num_nodes; i++)); do
+    for ((j=0; j < num_nodes; j++)); do
+        [[ $j == $i ]] && continue
+        echo "$i -- ipfs get ${cids[$i,$j]}"
+    done
+done | iptb run |
+       perl -p -e 's/node\[(\d)\].*?$/\1/' |
+       sed -e '/^$/d' |
+       grep --color=no -oP '((^\d)|(Qm.*?)|([0-9ms]+))$' |
+       sed 'N;N;s/\n/,/g' > "${results_prefix}aggregate"
 
-### GATHER RESULTS ###
-
-gather_results
+for ((i=0; i < num_nodes; i++)); do
+    docker cp $(iptb attr get $i container):ipfs_log "${results_prefix}ledgers_$i"
+done
 
 # kill nodes
-iptb kill
+iptb stop
