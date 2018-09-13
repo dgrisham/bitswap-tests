@@ -20,18 +20,31 @@ shift $((OPTIND-1))
 
 yes | iptb auto --type dockeripfs --count $num_nodes
 iptb start --wait
-# persistent iptb run -- ipfs log level engine debug
 persistent iptb connect
 
-iptb run --longopts detach -- sh -c "ipfs log tail >ipfs_log"
+for ((i=0; i< num_nodes; i++)); do
+    docker exec --detach $(iptb attr get $i container) sh -c "ipfs log tail >ipfs_log"
+done
 
-iptb run 0 -- sh -c "$file_cmd >file"
-cid=$(iptb run 0 -- ipfs add -q ./file | tail -n2)
-# cid=$(iptb run 0 -- ipfs add -q ./file | tail -n2 | tr -d '\r')
-iptb run 1 -- ipfs get $cid
+declare -Ag cids
+# each node uploads a file
+for ((i=0; i < num_nodes; i++)); do
+    for ((j=0; j < num_nodes; j++)); do
+        [[ $i == $j ]] && continue
+        iptb run $i -- sh -c "$file_cmd >file_for_$j"
+        cids[$j,$i]=$(iptb run $i -- ipfs add -q "file_for_$j" | tail -n2)
+    done
+done
 
 for ((i=0; i < num_nodes; i++)); do
-    docker cp $(cat $IPTB_ROOT/testbeds/default/$i/dockerid):ipfs_log logs_$i
+    for ((j=0; j < num_nodes; j++)); do
+        [[ $j == $i ]] && continue
+        echo "$i -- ipfs get ${cids[$i,$j]}"
+    done
+done | iptb run
+
+for ((i=0; i < num_nodes; i++)); do
+    docker cp $(iptb attr get $i container):ipfs_log logs_$i
     sed -i '/DebtRatio/!d' logs_$i
 done
 
