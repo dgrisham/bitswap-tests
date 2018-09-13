@@ -2,13 +2,8 @@
 
 set -ex
 
-test_num=3
 while getopts "t::n:f:d:b:r:s:" opt; do
     case $opt in
-        t)
-            [[ -z "$OPTARG" ]] && exit 1
-            test_num="$OPTARG"
-            ;;
         n)
             [[ -z "$OPTARG" ]] && exit 1
             num_nodes="$OPTARG"
@@ -49,9 +44,6 @@ while getopts "t::n:f:d:b:r:s:" opt; do
 done
 shift $((OPTIND-1))
 
-# source the specified test
-source "tests/test-$test_num.sh"
-
 persistent() {
     until $@; do :; done
 }
@@ -60,7 +52,7 @@ yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
 iptb start --wait
 persistent iptb connect
 
-results_prefix="results/$test_num/$results_dir/"
+results_prefix="results/$results_dir/"
 mkdir -p "$results_prefix"
 
 if [[ ! -z "$strategy" ]]; then
@@ -80,9 +72,7 @@ if [[ ! -z "$strategy" ]]; then
         done
         results_prefix+="rb_$(echo $round_bursts | sed 's/ /_/g')-"
     else
-        echo "$round_bursts"
         echo "error: specified $num_rbs round lengths. should be 1 or $num_nodes"
-        exit 1
     fi
 fi
 
@@ -141,7 +131,7 @@ done | iptb run |
        sed 'N;N;s/\n/,/g' > "${results_prefix}aggregate"
 
 for ((i=0; i < num_nodes; i++)); do
-    docker cp $(iptb attr get $i container):ipfs_log "${results_prefix}ledgers_$i"
+    docker exec $(iptb attr get $i container) cat ipfs_log | grep DebtRatio > "${results_prefix}ledgers_$i"
 done
 
 # kill nodes
