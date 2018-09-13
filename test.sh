@@ -1,9 +1,13 @@
 #!/bin/bash
 
-set -ex
+set -x
 
 while getopts "t::n:f:d:b:r:s:" opt; do
     case $opt in
+        t)
+            [[ -z "$OPTARG" ]] && exit 1
+            test_num="$OPTARG"
+            ;;
         n)
             [[ -z "$OPTARG" ]] && exit 1
             num_nodes="$OPTARG"
@@ -44,6 +48,8 @@ while getopts "t::n:f:d:b:r:s:" opt; do
 done
 shift $((OPTIND-1))
 
+source "tests/test-$test_num.sh"
+
 persistent() {
     until $@; do :; done
 }
@@ -52,8 +58,9 @@ yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
 iptb start --wait
 persistent iptb connect
 
-results_prefix="results/$results_dir/"
+results_prefix="results/$test_num/$results_dir/"
 mkdir -p "$results_prefix"
+rm -f "${results_prefix}/*"
 
 if [[ ! -z "$strategy" ]]; then
     iptb run -- ipfs config --json -- Experimental.BitswapStrategyEnabled true
@@ -67,12 +74,13 @@ if [[ ! -z "$strategy" ]]; then
     elif [[ $num_rbs -eq $num_nodes ]]; then
         k=0
         for rb in $round_bursts; do
-            iptb run $k ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb
+            iptb run $k -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb
             ((++k))
         done
         results_prefix+="rb_$(echo $round_bursts | sed 's/ /_/g')-"
     else
         echo "error: specified $num_rbs round lengths. should be 1 or $num_nodes"
+        exit 1
     fi
 fi
 
@@ -95,43 +103,18 @@ elif [[ $num_bws > 1 ]]; then
     results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
-# start capturing logs
-
+# background processes to gather log files
 for ((i=0; i< num_nodes; i++)); do
-    docker exec --detach $(iptb attr get $i container) sh -c "ipfs log tail >ipfs_log"
+    docker exec --detach $(iptb attr get $i container) script -c 'trap "exit" SIGTERM; ipfs log tail | grep DebtRatio' ipfs_log
 done
 
-### CONNECT NODES ###
+# run test body
+body
 
-persistent iptb connect
-
-### ADD FILES ###
-
-declare -A cids
-# each node uploads a file
+# grab debt ratio update events from logs
 for ((i=0; i < num_nodes; i++)); do
-    for ((j=0; j < num_nodes; j++)); do
-        [[ $i == $j ]] && continue
-        iptb run $i -- sh -c "$file_cmd >file"
-        cids[$j,$i]=$(iptb run $i -- sh -c "ipfs add -q file && rm file" | tail -n2)
-    done
-done
-
-### REQUEST FILES, GATHER STATS ###
-
-for ((i=0; i < num_nodes; i++)); do
-    for ((j=0; j < num_nodes; j++)); do
-        [[ $j == $i ]] && continue
-        echo "$i -- ipfs get ${cids[$i,$j]}"
-    done
-done | iptb run |
-       perl -p -e 's/node\[(\d)\].*?$/\1/' |
-       sed -e '/^$/d' |
-       grep --color=no -oP '((^\d)|(Qm.*?)|([0-9ms]+))$' |
-       sed 'N;N;s/\n/,/g' > "${results_prefix}aggregate"
-
-for ((i=0; i < num_nodes; i++)); do
-    docker exec $(iptb attr get $i container) cat ipfs_log | grep DebtRatio > "${results_prefix}ledgers_$i"
+    docker exec $(iptb attr get $i container) pkill -TERM script
+    docker cp $(iptb attr get $i container):ipfs_log "${results_prefix}ledgers_$i"
 done
 
 # kill nodes
