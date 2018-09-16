@@ -5,9 +5,6 @@
 # result: aggregate stats; ledgers over time
 
 body() {
-    # Connect nodes
-    persistent iptb connect
-
     # Add files
     declare -A cids
     # each node uploads a file

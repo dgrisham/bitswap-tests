@@ -103,6 +103,10 @@ elif [[ $num_bws > 1 ]]; then
     results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
 fi
 
+for ((i=0; i< num_nodes; i++)); do
+    nodeIds[$i]="$(iptb attr get $i id)"
+done
+
 # background processes to gather log files
 for ((i=0; i< num_nodes; i++)); do
     docker exec --detach $(iptb attr get $i container) script -c 'trap "exit" SIGTERM; ipfs log tail | grep DebtRatio' ipfs_log
@@ -119,3 +123,15 @@ done
 
 # kill nodes
 iptb stop
+
+# Format logs
+# -----------
+
+for ((i=0; i < num_nodes; i++)); do
+    ledger_file="${results_prefix}ledgers_$i"
+    cat "$ledger_file" |
+    jq '{event: .event|ltrimstr("Bitswap.DebtRatioUpdatedOn"),peer:.peer,time:.time,sent:.sent,recv:.recv,value:.value}' |
+    jq -s '{"'"${nodeIds[$i]}"'":[.[]]}' | sponge "${results_prefix}ledgers_$i"
+done
+
+jq -s '.' ${results_prefix}ledgers_* > "${results_prefix}ledgers"
