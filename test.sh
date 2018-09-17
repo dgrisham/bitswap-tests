@@ -135,3 +135,4 @@ for ((i=0; i < num_nodes; i++)); do
 done
 
 jq -s '.' ${results_prefix}ledgers_* > "${results_prefix}ledgers"
+rm -f ${results_prefix}ledgers_*
