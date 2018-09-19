@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+# set -ex
 
 while getopts "t::n:f:d:b:r:s:" opt; do
     case $opt in
@@ -18,16 +18,15 @@ while getopts "t::n:f:d:b:r:s:" opt; do
             ;;
         b)
             [[ -z "$OPTARG" ]] && exit 1
-            bw_dist="$OPTARG"
+            IFS=' ' read -r -a bw_dist <<< "$OPTARG"
             ;;
         r)
             [[ -z "$OPTARG" ]] && exit 1
-            echo "setting round bursts to: $OPTARG"
-            round_bursts="$OPTARG"
+            IFS=' ' read -r -a round_bursts <<< "$OPTARG"
             ;;
         s)
             [[ -z "$OPTARG" ]] && exit 1
-            strategy="$OPTARG"
+            IFS=' ' read -r -a strategies <<< "${OPTARG}"
             ;;
         d)
             [[ -z "$OPTARG" ]] && exit 1
@@ -48,59 +47,76 @@ while getopts "t::n:f:d:b:r:s:" opt; do
 done
 shift $((OPTIND-1))
 
-source "tests/test-$test_num.sh"
+# post-process args
 
-persistent() {
-    until $@; do :; done
-}
-
-yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
-iptb start --wait
-persistent iptb connect
-
-results_prefix="results/$test_num/$results_dir/"
-mkdir -p "$results_prefix"
-rm -f "${results_prefix}/*"
-
-if [[ ! -z "$strategy" ]]; then
-    iptb run -- ipfs config --json -- Experimental.BitswapStrategyEnabled true
-    iptb run -- ipfs config --json -- Experimental.BitswapStrategy "\"$strategy\""
-    results_prefix+="${strategy,,}-"
-
-    num_rbs=$(wc -w <<< $round_bursts)
-    if [[ $num_rbs -eq 1 ]]; then
-        iptb run -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $round_bursts
-        results_prefix+="rb_$round_bursts-"
-    elif [[ $num_rbs -eq $num_nodes ]]; then
-        k=0
-        for rb in $round_bursts; do
-            iptb run $k -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb
-            ((++k))
-        done
-        results_prefix+="rb_$(echo $round_bursts | sed 's/ /_/g')-"
-    else
-        echo "error: specified $num_rbs round lengths. should be 1 or $num_nodes"
+declare -A jq_args
+if ((${#strategies[@]} > 0)); then
+    if ((${#strategies[@]} == 1)); then
+        s=${strategies[0]}
+        strategies=($(for ((i=0; i < $num_nodes; i++)); do echo "$s"; done))
+    elif ((${#strategies[@]} != num_nodes)); then
+        echo "error: specified ${#strategies[@]} strategies. should be 0, 1 or $num_nodes"
         exit 1
     fi
 fi
 
-num_bws=$(wc -w <<< $bw_dist)
-if [[ $num_bws -eq 1 ]]; then
-    scripts/set_rates.sh -i -n0 -u$bw_dist
-    for ((k=1; k < num_nodes; k++)); do
-        scripts/set_rates.sh -n$k -u$bw_dist
-    done
-    results_prefix+="$bw_dist"$(printf "_$bw_dist%.0s" $(eval echo {1..$((num_nodes-1))}))
-elif [[ $num_bws > 1 ]]; then
+if ((${#round_bursts[@]} == 1)); then
+    rb=${round_bursts[0]}
+    round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
+elif ((${#round_bursts[@]} != num_nodes)); then
+    echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes"
+    exit 1
+fi
+
+if ((${#bw_dist[@]} > 0)); then
+    if ((${#bw_dist[@]} == 1)); then
+        bw=${bw_dist[0]}
+        bw_dist=($(for ((i=0; i < $num_nodes; i++)); do echo $bw; done))
+    elif ((${#bw_dist[@]} != num_nodes)); then
+        echo "error: specified ${#bw_dist[@]} upload bandwidth values. should be 0, 1 or $num_nodes"
+        exit 1
+    fi
+fi
+
+source "tests/test-$test_num.sh"
+
+yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
+iptb start --wait
+
+results_prefix="results/$test_num/$results_dir/"
+mkdir -p "$results_prefix"
+rm -f ${results_prefix}/*
+
+if [[ -v strategies[@] ]]; then
+    iptb run -- ipfs config --json -- Experimental.BitswapStrategyEnabled true
     k=0
-    for bw in $bw_dist; do
+    for s in ${strategies[@]}; do
+        echo "$k"' -- ipfs config --json -- Experimental.BitswapStrategy \"'"$s"'\"'
+        ((++k))
+    done | iptb run
+    results_prefix+="${strategies[0]}-"
+    # NOTE: replace above with this second version if supporting heterogeneous strategies
+    # results_prefix+="$(echo ${strategies[i]} | sed 's/ /_/g')-"
+
+    if [[ -v round_bursts[@] ]]; then
+        k=0
+        for rb in ${round_bursts[@]}; do
+            echo "$k -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb"
+            ((++k))
+        done | iptb run
+        results_prefix+="rb_$(echo ${round_bursts[@]} | sed 's/ /_/g')-"
+    fi
+fi
+
+if [[ -v bw_dist[@] ]]; then
+    for bw in ${bw_dist[@]}; do
         if [[ "$k" -eq 0 ]]; then
             [[ "$bw" != "-1" ]] && scripts/set_rates.sh -i -n$k -u$bw
         fi
         [[ "$bw" != "-1" ]] && scripts/set_rates.sh -n$k -u$bw
         ((++k))
     done
-    results_prefix+="$(echo $bw_dist | sed 's/ /_/g')-"
+    results_prefix+="bw_$(echo ${bw_dist[@]} | sed 's/ /_/g')-"
 fi
 
 for ((i=0; i< num_nodes; i++)); do
@@ -128,11 +144,37 @@ iptb stop
 # -----------
 
 for ((i=0; i < num_nodes; i++)); do
+    declare -A jq_args
+    jq_args="--arg id ${nodeIds[i]}"
+    jq_str='{id: $id'
+    if [[ -v strategies[@] ]]; then
+        jq_args+=" --arg s ${strategies[i]}"
+        jq_str+=', strategy: $s'
+    fi
+    if [[ -v round_bursts[@] ]]; then
+        jq_args+=" --arg rb ${round_bursts[i]}"
+        jq_str+=',round_burst: $rb'
+    fi
+    if [[ -v bw_dist[@] ]]; then
+        jq_args+=" --arg bw ${bw_dist[i]}"
+        jq_str+=',upload_bandwidth: $bw'
+    fi
+    if [[ -v uploads[@] ]]; then
+        jq_args+=" --argjson uploads [${uploads[$i]}]"
+        jq_str+=',uploads: $uploads'
+    fi
+    if [[ -v dl_times[@] ]]; then
+        jq_args+=" --argjson dl_times [${dl_times[$i]}]"
+        jq_str+=',dl_times: $dl_times'
+    fi
+    jq_str+=',history:.}'
+
     ledger_file="${results_prefix}ledgers_$i"
     cat "$ledger_file" |
     jq '{event: .event|ltrimstr("Bitswap.DebtRatioUpdatedOn"),peer:.peer,time:.time,sent:.sent,recv:.recv,value:.value}' |
-    jq -s '{"'"${nodeIds[$i]}"'":[.[]]}' | sponge "${results_prefix}ledgers_$i"
+    jq -s $jq_args "$jq_str" |
+    sponge "${results_prefix}ledgers_$i"
 done
 
-jq -s '.' ${results_prefix}ledgers_* > "${results_prefix}ledgers"
+jq -s '.' ${results_prefix}ledgers_* > "${results_prefix%?}"
 rm -f ${results_prefix}ledgers_*

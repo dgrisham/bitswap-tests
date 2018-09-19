@@ -6,7 +6,8 @@
 # result: aggregate stats; time series of user 0's ledgers
 
 body() {
-    persistent iptb connect 0 "[1,$((num_nodes-1))]"
+    # connect nodes
+    iptb connect 0 "[1,$((num_nodes-1))]"
 
     declare -a cids
     for ((i=0; i < num_nodes; i++)); do
