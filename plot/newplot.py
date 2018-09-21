@@ -30,13 +30,13 @@ def main(argv):
     try:
         results = load(args.infile)
     except Exception as e:
-        print(f"error loading results file: {e}", file=sys.stderr)
+        print(prependErr("error loading results file", e), file=sys.stderr)
         sys.exit(1)
 
     try:
         plot(results['ledgers'])
     except Exception as e:
-        print(f"error plotting results: {e}", file=sys.stderr)
+        print(prependErr("error plotting results", e), file=sys.stderr)
 
     return results
 
@@ -98,13 +98,14 @@ def plot(ls, trange=None, prange=None):
 
     try:
         axes = makeAxes(3, "Testing")
+        1/0
     except Exception as e:
-        reraise("error configuring plot axes", e)
+        raise prependErr("error configuring plot axes", e)
 
     try:
         axesLog = makeAxes(3, "Testing", log=True)
     except Exception as e:
-        reraise("error configuring semi-log plot axes", e)
+        raise prependErr("error configuring semi-log plot axes", e)
 
     for i, user in enumerate(ls.index.levels[0]):
         u = ls.loc[user]
@@ -158,8 +159,8 @@ def makeAxes(n, plotTitle, log=False):
 
     return axes
 
-def reraise(msg, e):
-    raise type(e)(f"{msg}: {e}").with_traceback(sys.exc_info()[2])
+def prependErr(msg, e):
+    return type(e)(f"{msg}: {e}").with_traceback(sys.exc_info()[2])
 
 if __name__ == '__main__':
     r = main(sys.argv[1:])
