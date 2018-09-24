@@ -5,7 +5,6 @@ import sys
 import argparse
 import json
 import traceback
-import warnings
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,16 +13,6 @@ from math import floor, ceil
 from pandas.io.json import json_normalize
 
 plt.style.use('ggplot')
-
-# avoid printing source line for warnigns when it's a call to `warnings.warn()`
-def _custom_warning(msg, category, fname, lineno, file=None, line=None):
-    msg_lines = warnings.formatwarning(msg, category, fname, lineno, line).split('\n')
-    if msg_lines[-2].startswith('  warnings.warn('):
-        msg = '\n'.join(msg_lines[:-2]) + '\n'
-    else:
-        msg = '\n'.join(msg_lines)
-    sys.stderr.write(msg)
-warnings.showwarning = _custom_warning
 
 """
 TODO:
@@ -62,7 +51,7 @@ def main(argv):
         sys.exit(1)
 
     try:
-        plot(results['ledgers'], kind=args.kind, prange=(0,0.5))
+        plot(results['ledgers']['value'], kind=args.kind, prange=(0,0.5))
         if not args.no_plot:
             plt.show()
             plt.clf()
@@ -100,7 +89,7 @@ def load(fname):
 
     return {'uploads': uploads, 'dl_times': dl_times, 'ledgers': ledgers}
 
-def plot(ls, kind='all', trange=None, prange=None):
+def plot(dratios, kind='all', trange=None, prange=None):
     """
     Inputs:
         -   `ls :: pd.DataFrame`
@@ -110,12 +99,12 @@ def plot(ls, kind='all', trange=None, prange=None):
     """
 
     if kind == 'all':
-        plotAll(ls, trange, prange)
+        plotAll(dratios, trange, prange)
     elif kind == 'pairs':
-        plotPairs(ls, trange, prange)
+        plotPairs(dratios, trange, prange)
 
-def plotAll(ls, trange=None, prange=None):
-    time = ls.index.levels[2]
+def plotAll(dratios, trange=None, prange=None):
+    time = dratios.index.levels[2]
     if trange is not None:
         ti, tf = trange
     elif prange is not None:
@@ -125,11 +114,11 @@ def plotAll(ls, trange=None, prange=None):
         ti, tf = 0, len(time) - 1
     tmin, tmax = time[[ti, tf]]
 
-    drmin  = ls['value'].min()
-    drmax  = ls['value'].max()
-    drmean = ls['value'].mean()
+    drmin  = dratios.min()
+    drmax  = dratios.max()
+    drmean = dratios.mean()
 
-    num_peers = len(ls.index.levels[0]) * (len(ls.index.levels[1]) - 1)
+    num_peers = len(dratios.index.levels[0]) * (len(dratios.index.levels[1]) - 1)
     try:
         ax = makeAxes(1, num_peers, "Testing")
     except Exception as e:
@@ -141,29 +130,29 @@ def plotAll(ls, trange=None, prange=None):
         raise prependErr("error configuring semi-log plot axes", e)
 
 
-    for i, user in enumerate(ls.index.levels[0]):
-        u = ls.loc[user]
+    for i, user in enumerate(dratios.index.levels[0]):
+        u = dratios.loc[user]
         for j, peer in enumerate(u.index.levels[0]):
             if user == peer:
                 continue
             pall = u.loc[peer]
             p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
             if len(p) == 0:
-                warnings.warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
+                warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
                 continue
             factor = 0.25
 
-            p.plot(y='value', ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=ax, label=f"Debt ratio of {j} wrt {i}")
+            p.plot(ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=ax, label=f"Debt ratio of {j} wrt {i}")
             # p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
 
-            p.plot(y='value', ylim=(drmin * 0.5, drmax * 1.5), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
+            p.plot(ylim=(drmin * 0.5, drmax * 1.5), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
             ax.legend(prop={'size': 'large'})
             axLog.legend(prop={'size': 'large'})
 
     # p.plot(x=p.loc[tmax], y='value', ax=axes[i], style='bx', label='point')
     pass
 
-def plotPairs(ls, trange=None, prange=None):
+def plotPairs(dratios, trange=None, prange=None):
     """
     -   Plots debt ratios (stored in `ls`, aka ledgers) from either:
         -   trange[0] to trange[1], or
@@ -177,7 +166,7 @@ def plotPairs(ls, trange=None, prange=None):
         -   `prange :: (float, float)`
     """
 
-    time = ls.index.levels[2]
+    time = dratios.index.levels[2]
     if trange is not None:
         ti, tf = trange
     elif prange is not None:
@@ -187,12 +176,12 @@ def plotPairs(ls, trange=None, prange=None):
         ti, tf = 0, len(time) - 1
     tmin, tmax = time[[ti, tf]]
 
-    drmin  = ls['value'].min()
-    drmax  = ls['value'].max()
-    drmean = ls['value'].mean()
+    drmin  = dratios.min()
+    drmax  = dratios.max()
+    drmean = dratios.mean()
 
-    n = len(ls.index.levels[0])
-    num_pairs = n * (len(ls.index.levels[1]) - 1) // 2
+    n = len(dratios.index.levels[0])
+    num_pairs = n * (len(dratios.index.levels[1]) - 1) // 2
     try:
         axes = makeAxes(n, num_pairs, "Testing")
     except Exception as e:
@@ -202,21 +191,21 @@ def plotPairs(ls, trange=None, prange=None):
     except Exception as e:
         raise prependErr("configuring semi-log plot axes", e)
 
-    for i, user in enumerate(ls.index.levels[0]):
-        u = ls.loc[user]
+    for i, user in enumerate(dratios.index.levels[0]):
+        u = dratios.loc[user]
         for j, peer in enumerate(u.index.levels[0]):
             if user == peer:
                 continue
             pall = u.loc[peer]
-            p = pall[(tmin <= pall.index) & (pall.index <= tmax)]['value']
+            p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
             if len(p) == 0:
-                warnings.warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
+                warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
                 continue
             factor = 0.25
             p.plot(ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=axes[i], label=f"Debt ratio of {j} wrt {i}")
             axes[i].legend(prop={'size': 'large'})
             if p[p > 0].count() == 0:
-                warnings.warn(f"all debt ratios are 0 for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]. skipping semi-log plot")
+                warn(f"all debt ratios are 0 for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]. skipping semi-log plot")
                 continue
             p.plot(ylim=(drmin * 0.5, drmax * 1.5), logy=True, ax=axesLog[i], label=f"Debt ratio of {j} wrt {i}")
             # p.plot(x=p.loc[tmax], y='value', ax=axes[i], style='bx', label='point')
@@ -262,6 +251,9 @@ def makeAxes(n, cycle_len, plotTitle, log=False):
     fig.tight_layout()
 
     return axes
+
+def warn(msg):
+    print(f"warning: {msg}", file=sys.stderr)
 
 def prependErr(msg, e):
     return type(e)(f"error {msg}: {e}").with_traceback(sys.exc_info()[2])
