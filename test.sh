@@ -176,5 +176,5 @@ for ((i=0; i < num_nodes; i++)); do
     sponge "${results_prefix}ledgers_$i"
 done
 
-jq -s '.' ${results_prefix}ledgers_* > "${results_prefix%?}"
+jq -s '.' ${results_prefix}ledgers_* > "${results_prefix%?}.json"
 rm -f ${results_prefix}ledgers_*
