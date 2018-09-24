@@ -5,6 +5,7 @@ import sys
 import argparse
 import json
 import traceback
+import warnings
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -51,7 +52,7 @@ def main(argv):
         sys.exit(1)
 
     try:
-        plot(results['ledgers']['value'], kind=args.kind, prange=(0,0.5))
+        plot(results['ledgers']['value'], kind=args.kind, prange=(0,1))
         if not args.no_plot:
             plt.show()
             plt.clf()
@@ -105,6 +106,7 @@ def plot(dratios, kind='all', trange=None, prange=None):
         plotPairs(dratios, trange, prange)
 
 def plotAll(dratios, trange=None, prange=None):
+    dratios.index = dratios.index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
     time = dratios.index.levels[2]
     if trange is not None:
         ti, tf = trange
@@ -142,16 +144,19 @@ def plotAll(dratios, trange=None, prange=None):
                 warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
                 continue
             factor = 0.25
-
-            p.plot(ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=ax, label=f"Debt ratio of {j} wrt {i}")
+            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor*drmean, drmax + factor*drmean), ax=ax, label=f"Debt ratio of {j} wrt {i}")
             # p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
+            p.plot(xlim=(tmin, tmax), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
+            axLog.set_ylim(top=drmax*1.5)
 
-            p.plot(ylim=(drmin * 0.5, drmax * 1.5), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
-            ax.legend(prop={'size': 'large'})
-            axLog.legend(prop={'size': 'large'})
-
-    # p.plot(x=p.loc[tmax], y='value', ax=axes[i], style='bx', label='point')
-    pass
+    try:
+        cfgAxes([ax])
+    except Exception as e:
+        raise prependErr("post-plot axis config", e)
+    try:
+        cfgAxes([axLog], log=True)
+    except Exception as e:
+        raise prependErr("post-plot semi-log axis config", e)
 
 def plotPairs(dratios, trange=None, prange=None):
     """
@@ -167,6 +172,7 @@ def plotPairs(dratios, trange=None, prange=None):
         -   `prange :: (float, float)`
     """
 
+    dratios.index = dratios.index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
     time = dratios.index.levels[2]
     if trange is not None:
         ti, tf = trange
@@ -203,14 +209,21 @@ def plotPairs(dratios, trange=None, prange=None):
                 warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
                 continue
             factor = 0.25
-            p.plot(ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=axes[i], label=f"Debt ratio of {j} wrt {i}")
-            axes[i].legend(prop={'size': 'large'})
+            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=axes[i], label=f"Debt ratio of {j} wrt {i}")
             if p[p > 0].count() == 0:
                 warn(f"all debt ratios are 0 for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]. skipping semi-log plot")
                 continue
-            p.plot(ylim=(drmin * 0.5, drmax * 1.5), logy=True, ax=axesLog[i], label=f"Debt ratio of {j} wrt {i}")
-            # p.plot(x=p.loc[tmax], y='value', ax=axes[i], style='bx', label='point')
-            axesLog[i].legend(prop={'size': 'large'})
+            p.plot(xlim=(tmin, tmax), logy=True, ax=axesLog[i], label=f"Debt ratio of {j} wrt {i}")
+            axesLog[i].set_ylim(top=drmax*1.5)
+
+    try:
+        cfgAxes(axes)
+    except Exception as e:
+        raise prependErr("configuring axes post-plot", e)
+    try:
+        cfgAxes(axesLog, log=True)
+    except Exception as e:
+        raise prependErr("configuring semi-log axes post-plot", e)
 
 def makeAxes(n, cycle_len, plotTitle, log=False):
     """
@@ -238,20 +251,25 @@ def makeAxes(n, cycle_len, plotTitle, log=False):
         if log:
             ax.set_title(f"{title} (Semi-Log)")
             ax.set_ylabel(f"log({ylabel})")
-            ax.set_xscale('symlog')
-            ax.set_yscale('symlog')
         else:
             ax.set_title(title)
             ax.set_ylabel(ylabel)
-
-        if i != len(axList) - 1:
-            ax.set_xlabel('')
-            plt.setp(ax.get_xticklabels(), visible=False)
 
     fig.suptitle(plotTitle)
     fig.tight_layout()
 
     return axes
+
+def cfgAxes(axes, log=False):
+    for i, ax in enumerate(axes):
+        ax.legend(prop={'size': 'large'})
+        if i != len(axes) - 1:
+            ax.set_xlabel('')
+            plt.setp(ax.get_xticklabels(), visible=False)
+        else:
+            ax.set_xlabel("time (seconds)")
+        if log:
+            ax.set_yscale('symlog')
 
 def warn(msg):
     print(f"warning: {msg}", file=sys.stderr)
