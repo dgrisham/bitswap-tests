@@ -25,7 +25,7 @@ def main(argv):
         'infile',
         metavar='<results_file>',
         type=str,
-        help='results file to load and plot',
+        help='json results file to load and plot',
     )
     cli.add_argument(
         '--no-plot',
@@ -77,6 +77,7 @@ def load(fname):
         jdata = json.load(jfile)
 
     # load results into separate dataframes
+    params = pd.DataFrame.from_records(jdata, exclude=['uploads', 'dl_times', 'history'], index='id')
     uploads  = pd.concat([json_normalize(data=pdata, record_path='uploads',  meta='id') for pdata in jdata]).set_index('id')
     dl_times = pd.concat([json_normalize(data=pdata, record_path='dl_times', meta='id') for pdata in jdata]).set_index(['id', 'block'])
     ledgers  = pd.concat([json_normalize(data=pdata, record_path='history',  meta='id') for pdata in jdata])
@@ -87,7 +88,7 @@ def load(fname):
     ledgers['time'] = ledgers['time'].apply(lambda t: t - t0)
     ledgers = ledgers.set_index(['id', 'peer', 'time'])
 
-    return {'uploads': uploads, 'dl_times': dl_times, 'ledgers': ledgers}
+    return {'params': params, 'uploads': uploads, 'dl_times': dl_times, 'ledgers': ledgers}
 
 def plot(dratios, kind='all', trange=None, prange=None):
     """
