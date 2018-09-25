@@ -93,81 +93,22 @@ def load(fname):
 
 def plot(dratios, kind='all', trange=None, prange=None):
     """
-    Inputs:
-        -   `ls :: pd.DataFrame`
-        -   `kind :: str`: Which plotting function to use. Supports 'all' or 'pairs'.
-        -   `trange :: (pd.Datetime, pd.Datetime)`
-        -   `prange :: (float, float)`
-    """
-
-    if kind == 'all':
-        plotAll(dratios, trange, prange)
-    elif kind == 'pairs':
-        plotPairs(dratios, trange, prange)
-
-def plotAll(dratios, trange=None, prange=None):
-    dratios.index = dratios.index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
-    time = dratios.index.levels[2]
-    if trange is not None:
-        ti, tf = trange
-    elif prange is not None:
-        ti = floor(prange[0] * len(time))
-        tf = ceil(prange[1] * len(time)) - 1
-    else:
-        ti, tf = 0, len(time) - 1
-    tmin, tmax = time[[ti, tf]]
-
-    drmin  = dratios.min()
-    drmax  = dratios.max()
-    drmean = dratios.mean()
-
-    num_peers = len(dratios.index.levels[0]) * (len(dratios.index.levels[1]) - 1)
-    try:
-        ax = makeAxes(1, num_peers, "Testing")
-    except Exception as e:
-        raise prependErr("error configuring plot axes", e)
-
-    try:
-        axLog = makeAxes(1, num_peers, "Testing", log=True)
-    except Exception as e:
-        raise prependErr("error configuring semi-log plot axes", e)
-
-
-    for i, user in enumerate(dratios.index.levels[0]):
-        u = dratios.loc[user]
-        for j, peer in enumerate(u.index.levels[0]):
-            if user == peer:
-                continue
-            pall = u.loc[peer]
-            p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
-            if len(p) == 0:
-                warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
-                continue
-            factor = 0.25
-            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor*drmean, drmax + factor*drmean), ax=ax, label=f"Debt ratio of {j} wrt {i}")
-            # p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
-            p.plot(xlim=(tmin, tmax), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
-            axLog.set_ylim(top=drmax*1.5)
-
-    try:
-        cfgAxes([ax])
-    except Exception as e:
-        raise prependErr("post-plot axis config", e)
-    try:
-        cfgAxes([axLog], log=True)
-    except Exception as e:
-        raise prependErr("post-plot semi-log axis config", e)
-
-def plotPairs(dratios, trange=None, prange=None):
-    """
-    -   Plots debt ratios (stored in `ls`, aka ledgers) from either:
+    Purpose
+        Plots debt ratios (stored in `ls`, aka ledgers) from either:
         -   trange[0] to trange[1], or
         -   prange[0] * tf to prange[1] * tf, where tf is the last time that
             the ledgers were updated
-    -   At the final plotted time, dot is shown where inner color is peer whose
-        debt ratio it is, outer/border color is peer whose judgement it is.
+        Currently supports 2 kinds of plots:
+        -   'all': Plot every peerwise time series of debt ratio values on one plot. This
+                   will produce one plot with a line for each pair of peers.
+        -   'pairs': Make one time-series plot for every pair of peers i j. Each plot will
+                     contain two lines: one for user i's view of peer j, and one for j's
+                     view of i.
+        Note: Two users are considered 'peers' if at least one of them has a ledger history
+              stored for the other.
     Inputs:
         -   `ls :: pd.DataFrame`
+        -   `kind :: str`: Which plotting function to use.
         -   `trange :: (pd.Datetime, pd.Datetime)`
         -   `prange :: (float, float)`
     """
@@ -183,47 +124,58 @@ def plotPairs(dratios, trange=None, prange=None):
         ti, tf = 0, len(time) - 1
     tmin, tmax = time[[ti, tf]]
 
+    if kind == 'all':
+        # only make a single plot axis
+        n = 1
+        # cycle length is equal to the number of pairs of peers (order matters)
+        cycle_len = len(dratios.index.levels[0]) * (len(dratios.index.levels[1]) - 1)
+    elif kind == 'pairs':
+        # one plot axis for every peer
+        n = len(dratios.index.levels[0])
+        # cycle length is equal to the number of pairs of peers (order doesn't matter)
+        cycle_len = n * (len(dratios.index.levels[1]) - 1) // 2
+
+    plotTitle = "Testing"
+    try:
+        axes = makeAxes(n, cycle_len, plotTitle)
+    except Exception as e:
+        raise prependErr("error configuring plot axes", e)
+    try:
+        axesLog = makeAxes(n, cycle_len, plotTitle, log=True)
+    except Exception as e:
+        raise prependErr("error configuring semi-log plot axes", e)
+
     drmin  = dratios.min()
     drmax  = dratios.max()
     drmean = dratios.mean()
 
-    n = len(dratios.index.levels[0])
-    num_pairs = n * (len(dratios.index.levels[1]) - 1) // 2
-    try:
-        axes = makeAxes(n, num_pairs, "Testing")
-    except Exception as e:
-        raise prependErr("configuring plot axes", e)
-    try:
-        axesLog = makeAxes(n, num_pairs, "Testing", log=True)
-    except Exception as e:
-        raise prependErr("configuring semi-log plot axes", e)
-
     for i, user in enumerate(dratios.index.levels[0]):
         u = dratios.loc[user]
+        # k is the index of the axis we should be plotting on, based on which user
+        # we're plotting, i, and the total number of plots we want by the end, n
+        k = i % n
         for j, peer in enumerate(u.index.levels[0]):
             if user == peer:
                 continue
             pall = u.loc[peer]
             p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
             if len(p) == 0:
-                warn(f"no data for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]")
+                warn(f"no data for peers {i} ({user}) and {j} ({peer}) [{tmin}, {tmax}]")
                 continue
             factor = 0.25
-            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor * drmean, drmax + factor * drmean), ax=axes[i], label=f"Debt ratio of {j} wrt {i}")
-            if p[p > 0].count() == 0:
-                warn(f"all debt ratios are 0 for peers {i} ({user}) and {j} ({peer}) in time range [{tmin}, {tmax}]. skipping semi-log plot")
-                continue
-            p.plot(xlim=(tmin, tmax), logy=True, ax=axesLog[i], label=f"Debt ratio of {j} wrt {i}")
-            axesLog[i].set_ylim(top=drmax*1.5)
+            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor*drmean, drmax + factor*drmean), ax=axes[k], label=f"Debt ratio of {j} wrt {i}")
+            # p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
+            p.plot(xlim=(tmin, tmax), logy=True, ax=axesLog[k], label=f"Debt ratio of {j} wrt {i}")
+        axesLog[k].set_ylim(top=drmax*1.5)
 
     try:
         cfgAxes(axes)
     except Exception as e:
-        raise prependErr("configuring axes post-plot", e)
+        raise prependErr("configuring axis post-plot", e)
     try:
         cfgAxes(axesLog, log=True)
     except Exception as e:
-        raise prependErr("configuring semi-log axes post-plot", e)
+        raise prependErr("configuring semi-log axis post-plot", e)
 
 def makeAxes(n, cycle_len, plotTitle, log=False):
     """
@@ -238,12 +190,10 @@ def makeAxes(n, cycle_len, plotTitle, log=False):
 
     fig, axes = plt.subplots(n)
     if n == 1:
-        axList = [axes]
-    else:
-        axList = axes
+        axes = [axes]
 
     colors = ['black', 'magenta', 'blue', 'red', 'orange', 'green']
-    for i, ax in enumerate(axList):
+    for i, ax in enumerate(axes):
         ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
 
         title = f"User {i}'s Debt Ratios"
