@@ -10,10 +10,14 @@ import warnings
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from matplotlib import rcParams
+from os.path import splitext
 from math import floor, ceil
 from pandas.io.json import json_normalize
 
 plt.style.use('ggplot')
+rcParams.update({'figure.autolayout': True})
+rcParams['axes.titlepad'] = 4
 
 """
 TODO:
@@ -26,13 +30,7 @@ def main(argv):
         'infile',
         metavar='<results_file>',
         type=str,
-        help='json results file to load and plot',
-    )
-    cli.add_argument(
-        '--no-plot',
-        action='store_true',
-        default=False,
-        help='if passed, do not show plots',
+        help="json results file to load and plot",
     )
     cli.add_argument(
         '-k',
@@ -40,7 +38,20 @@ def main(argv):
         type=str,
         choices=['all', 'pairs'],
         default='all',
-        help='which kind of plot to make',
+        help="which kind of plot to make",
+    )
+    cli.add_argument(
+        '--no-show',
+        action='store_true',
+        default=False,
+        help="do not show plots",
+    )
+    cli.add_argument(
+        '-s',
+        '--save',
+        action='store_true',
+        default=False,
+        help="save plots",
     )
     args = cli.parse_args(argv)
 
@@ -52,8 +63,12 @@ def main(argv):
         sys.exit(1)
 
     try:
-        plot(results['ledgers']['value'], kind=args.kind, prange=(0,1))
-        if not args.no_plot:
+        if args.save:
+            plot(results['ledgers']['value'], results['params'], kind=args.kind, prange=(0,1),
+                    outfilePrefix=f'{splitext(args.infile)[0]}-{args.kind}')
+        else:
+            plot(results['ledgers']['value'], results['params'], kind=args.kind, prange=(0,1))
+        if not args.no_show:
             plt.show()
             plt.clf()
             plt.close()
@@ -91,7 +106,7 @@ def load(fname):
 
     return {'params': params, 'uploads': uploads, 'dl_times': dl_times, 'ledgers': ledgers}
 
-def plot(dratios, kind='all', trange=None, prange=None):
+def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=None):
     """
     Purpose
         Plots debt ratios (stored in `ls`, aka ledgers) from either:
@@ -137,13 +152,13 @@ def plot(dratios, kind='all', trange=None, prange=None):
         # matter)
         cycle_len = n * (len(dratios.index.levels[1]) - 1) // 2
 
-    plotTitle = "Testing"
+    plotTitle = mkTitle(params)
     try:
-        axes = makeAxes(n, cycle_len, plotTitle)
+        fig, axes = mkAxes(n, cycle_len, plotTitle)
     except Exception as e:
         raise prependErr("error configuring plot axes", e)
     try:
-        axesLog = makeAxes(n, cycle_len, plotTitle, log=True)
+        figLog, axesLog = mkAxes(n, cycle_len, plotTitle, log=True)
     except Exception as e:
         raise prependErr("error configuring semi-log plot axes", e)
 
@@ -181,7 +196,43 @@ def plot(dratios, kind='all', trange=None, prange=None):
     except Exception as e:
         raise prependErr("configuring semi-log axis post-plot", e)
 
-def makeAxes(n, cycle_len, plotTitle, log=False):
+    if outfilePrefix is not None:
+        fig.set_tight_layout(False)
+        fig.savefig(f'{outfilePrefix}.pdf', bbox_inches='tight')
+        figLog.set_tight_layout(False)
+        figLog.savefig(f'{outfilePrefix}-semilog.pdf')
+
+def mkTitle(params):
+    rfList = params['strategy']
+    if rfList.nunique() == 1:
+        rfTitle = "RF"
+        rfs = rfList[0]
+    else:
+        rfTitle = "RFs"
+        rfs = ', '.join(rfList)
+    rfStr = f"{rfTitle}: {rfs.title()}"
+
+    bwList = params['upload_bandwidth']
+    if bwList.nunique() == 1:
+        bwTitle = "BW"
+        bws = bwList[0]
+    else:
+        bwTitle = "BWs"
+        bws = ', '.join(bwList)
+    bwStr = f"{bwTitle}: {bws.title()}"
+
+    rbList = params['round_burst']
+    if rbList.nunique() == 1:
+        rbTitle = "RF"
+        rbs = rbList[0]
+    else:
+        rbTitle = "RFs"
+        rbs = ', '.join(rbList)
+    rbStr = f"{rbTitle}: {rbs.title()}"
+
+    return f"Debt Ratio vs. Time -- {rfStr}, {bwStr}, {rbStr}"
+
+def mkAxes(n, cycle_len, plotTitle, log=False):
     """
     Create and configure `n` axes for a given debt ratio plot.
     Inputs:
@@ -200,23 +251,41 @@ def makeAxes(n, cycle_len, plotTitle, log=False):
     for i, ax in enumerate(axes):
         ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
 
-        title = f"User {i}'s Debt Ratios"
+        title = f"User {i}"
         ylabel = "Debt Ratio"
+
+        axArgs = { 'fontsize' : 'medium',
+                   'bbox': { 'boxstyle'  : 'round',
+                             'facecolor' : ax.get_facecolor(),
+                             'edgecolor' : '#000000',
+                             'linewidth' : 1,
+                            },
+                 }
+        ax.set_title(title, **axArgs)
+
+        titleArgs = { 'fontsize' : 'large',
+                      'x'        : (ax.get_position().xmin+ax.get_position().xmax) / 2,
+                      'y'        : 1.02,
+                      'ha'       : 'center',
+                      'bbox': { 'boxstyle'  : 'round',
+                               'facecolor' : ax.get_facecolor(),
+                               'edgecolor' : '#000000',
+                               'linewidth' : 1,
+                              },
+                    }
         if log:
-            ax.set_title(f"{title} (Semi-Log)")
             ax.set_ylabel(f"log({ylabel})")
+            fig.suptitle(f"{plotTitle} (Semi-Log)", **titleArgs)
         else:
-            ax.set_title(title)
             ax.set_ylabel(ylabel)
+            fig.suptitle(plotTitle, **titleArgs)
+    fig.subplots_adjust(hspace=0.5)
 
-    fig.suptitle(plotTitle)
-    fig.tight_layout()
-
-    return axes
+    return fig, axes
 
 def cfgAxes(axes, log=False):
     for i, ax in enumerate(axes):
-        ax.legend(prop={'size': 'large'})
+        ax.legend(prop={'size': 'medium'})
         if i != len(axes) - 1:
             ax.set_xlabel('')
             plt.setp(ax.get_xticklabels(), visible=False)
