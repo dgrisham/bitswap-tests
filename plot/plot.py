@@ -2,148 +2,305 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import os
-import re
 import argparse
-import pandas as pd
+import json
+import traceback
+import warnings
 
-#import matplotlib as mpl
-#mpl.use('Agg')
+import pandas as pd
 import matplotlib.pyplot as plt
 
+from matplotlib import rcParams
+from os.path import splitext
+from math import floor, ceil
+from pandas.io.json import json_normalize
+
 plt.style.use('ggplot')
+rcParams.update({'figure.autolayout': True})
+rcParams['axes.titlepad'] = 4
+
+"""
+TODO:
+
+"""
 
 def main(argv):
     cli = argparse.ArgumentParser()
     cli.add_argument(
         'infile',
-        metavar='f',
+        metavar='<results_file>',
         type=str,
-        help='Input aggregate results file.',
+        help="json results file to load and plot",
     )
     cli.add_argument(
-        '--no-plot',
+        '-k',
+        '--kind',
+        type=str,
+        choices=['all', 'pairs'],
+        default='all',
+        help="which kind of plot to make",
+    )
+    cli.add_argument(
+        '--no-show',
         action='store_true',
         default=False,
+        help="do not show plots",
+    )
+    cli.add_argument(
+        '-s',
+        '--save',
+        action='store_true',
+        default=False,
+        help="save plots",
     )
     args = cli.parse_args(argv)
 
     try:
-        aggregate = loadAggregate(args.infile)
+        results = load(args.infile)
     except Exception as e:
-        print(f"error loading aggregate file: {e}")
+        print(prependErr("loading results file", e), file=sys.stderr)
+        traceback.print_exc()
         sys.exit(1)
 
-    history = loadLedgers(aggregate.index.map(lambda uid: uid[2:8]), args.infile[:-len("aggregate")])
-    if not args.no_plot:
-        plotNew(history, outfile=args.infile[:-len("-aggregate")])
+    try:
+        if args.save:
+            plot(results['ledgers']['value'], results['params'], kind=args.kind, prange=(0,1),
+                    outfilePrefix=f'{splitext(args.infile)[0]}-{args.kind}')
+        else:
+            plot(results['ledgers']['value'], results['params'], kind=args.kind, prange=(0,1))
+        if not args.no_show:
+            plt.show()
+            plt.clf()
+            plt.close()
+    except Exception as e:
+        print(prependErr("plotting results", e), file=sys.stderr)
+        traceback.print_exc()
 
-    return aggregate, history
+    return results
 
-def loadAggregate(infile):
-    fname = os.path.basename(infile)
-    freg = r'(?:(?P<strategy>[a-z]+)-)?(?:rb_(?P<burst>\d+(?:_\d+)*)-)?bw_(?P<dist>\d+(?:_\d+)+)-aggregate'
-    fmatch = re.match(freg, fname)
+def load(fname):
+    """
+    Load json results file into 3 dataframes:
+        1.  `uploads`: Set of blocks uploaded by each peer.
+        2.  `dl_times`: Each peers' downloaded times for the blocks they downloaded.
+        3.  `ledgers`: The Bitswap ledger update ledgers for each peer.
+    Input:
+        -   `fname` :: str: Path to json file to load.
+    Returns: A dictionary containing the above dataframes.
+    """
 
-    if fmatch is None:
-        raise Exception(f"Bad filename format: {fname}")
-    resources = [int(b) for b in fmatch.group('dist').split('_')]
+    with open(fname, 'r') as jfile:
+        jdata = json.load(jfile)
 
-    aggregate = pd.read_csv(infile, index_col=0)
-    return aggregate
+    # load results into separate dataframes
+    params = pd.DataFrame.from_records(jdata, exclude=['uploads', 'dl_times', 'history'], index='id')
+    uploads  = pd.concat([json_normalize(data=pdata, record_path='uploads',  meta='id') for pdata in jdata]).set_index('id')
+    dl_times = pd.concat([json_normalize(data=pdata, record_path='dl_times', meta='id') for pdata in jdata]).set_index(['id', 'block'])
+    ledgers  = pd.concat([json_normalize(data=pdata, record_path='history',  meta='id') for pdata in jdata])
 
-    # dl_times = {}
-    # treg = r'(?:(?P<m>\d+)m)?(?P<s>\d+)s'
-    # for peer, row in data.iterrows():
-    #     ptime = re.match(treg, row['dl_time'])
-    #     if ptime is not None:
-    #         minutes = int(ptime.group('m')) if ptime.group('m') is not None else 0
-    #         dl_times[peer] = minutes * 60 + int(ptime.group('s'))
+    # use relative times for debt ratio update timestamps
+    ledgers['time'] = ledgers['time'].apply(pd.to_datetime)
+    t0 = ledgers['time'].min()
+    ledgers['time'] = ledgers['time'].apply(lambda t: t - t0)
+    ledgers = ledgers.set_index(['id', 'peer', 'time'])
 
-    # ratios = {}
-    # for peer, time in dl_times.items():
-    #     ratios[peer] = (resources[peer] / sum(resources)) / (time / sum(dl_times.values()))
+    return {'params': params, 'uploads': uploads, 'dl_times': dl_times, 'ledgers': ledgers}
 
-    # return ratios, data
+def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=None):
+    """
+    Purpose
+        Plots debt ratios (stored in `ls`, aka ledgers) from either:
+        -   trange[0] to trange[1], or
+        -   prange[0] * tf to prange[1] * tf, where tf is the last time that
+            the ledgers were updated
+        Currently supports 2 kinds of plots:
+        -   'all': Plot every peerwise time series of debt ratio values on one plot. This
+                   will produce one plot with a line for each pair of peers.
+        -   'pairs': Make one time-series plot for every pair of peers i j. Each plot will
+                     contain two lines: one for user i's view of peer j, and one for j's
+                     view of i.
+        Note: Two users are considered 'peers' if at least one of them has a ledger history
+              stored for the other.
+    Inputs:
+        -   `ls :: pd.DataFrame`
+        -   `kind :: str`: Which plotting function to use.
+        -   `trange :: (pd.Datetime, pd.Datetime)`
+        -   `prange :: (float, float)`
+    """
 
-def loadLedgers(uids, fprefix):
-    ledgers = []
-    print(f'{fprefix}')
-    if '/1/' in fprefix:
-        # TODO: this is a bad way to handle this
-        skip0 = True
-    for i, uid in enumerate(uids):
-        if i == 0 and skip0:
-            continue
-        ledgers_i = pd.read_csv(f"{fprefix}ledgers_{i}")
-        ledgers_i.index = pd.MultiIndex.from_arrays([ledgers_i.index.map(lambda i: i // 2), [uid] * ledgers_i.shape[0], ledgers_i['id']])
-        ledgers_i = ledgers_i.drop('id', axis=1)
-        ledgers_i.index = ledgers_i.index.map(lambda idx: (idx[0], uids.get_loc(idx[1]), uids.get_loc(idx[2])))
-        ledgers.append(ledgers_i)
-    return pd.concat(ledgers).sort_index()
-
-def plotNew(history, save=False, show=True, outfile=''):
-    dr_min = history['debt_ratio'].min()
-    dr_max = history['debt_ratio'].max()
-    dr_mean = history['debt_ratio'].mean()
-    fig, axes = plt.subplots(3)
-    figLog, axesLog = plt.subplots(3)
-
-    axes[0].set_prop_cycle('color', ['black', 'magenta'])
-    axes[1].set_prop_cycle('color', ['blue', 'red'])
-    axes[2].set_prop_cycle('color', ['orange', 'green'])
-
-    axesLog[0].set_prop_cycle('color', ['black', 'magenta'])
-    axesLog[1].set_prop_cycle('color', ['blue', 'red'])
-    axesLog[2].set_prop_cycle('color', ['orange', 'green'])
-
-    for (i, j), hij in history.groupby(level=[1, 2]):
-        hij.index = hij.index.droplevel([1, 2])
-        factor = 0.25
-        hij.plot(y='debt_ratio', xlim=(0, hij.index.get_level_values(0).max()), ylim=(dr_min - factor * dr_mean, dr_max + factor * dr_mean), ax=axes[i], label=f"Debt ratio of {j} wrt {i}")
-        hij.plot(y='debt_ratio', xlim=(0, hij.index.get_level_values(0).max()), ylim=(dr_min * 0.5, dr_max * 1.5), logy=True, ax=axesLog[i], label=f"Debt ratio of {j} wrt {i}")
-
-        legendFont = 'large'
-        axes[i].legend(prop={'size': legendFont})
-        axesLog[i].legend(prop={'size': legendFont})
-
-        title = f"User {i}'s Debt Ratios"
-        axes[i].set_title(title)
-        axesLog[i].set_title(f"{title} (Semi-Log)")
-
-        ylabel = "Debt Ratio"
-        axes[i].set_ylabel(ylabel)
-        axesLog[i].set_ylabel(f"log({ylabel})")
-
-    pts = outfile.split('-')
-    if len(pts) < 7:
-        title = outfile
+    dratios.index = dratios.index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
+    time = dratios.index.levels[2]
+    if trange is not None:
+        ti, tf = trange
+    elif prange is not None:
+        ti = floor(prange[0] * len(time))
+        tf = ceil(prange[1] * len(time)) - 1
     else:
-        title = f"RF: {pts[0].title()}, IR: {pts[1].title()}, Data: {pts[2]}, DPR: [{pts[3].replace('_', ', ')}], UR: [{pts[4].replace('_', ', ')}], {pts[5].replace('_', ' ').title()} ({pts[6].title()})"
+        ti, tf = 0, len(time) - 1
+    tmin, tmax = time[[ti, tf]]
 
-    fig.suptitle(title)
-    axes[0].set_xlabel('')
-    axes[1].set_xlabel('')
+    plotDot = True
+    if kind == 'all':
+        # only make a single plot axis
+        n = 1
+        # the color cycle length is equal to the number of pairs of peers (order matters)
+        cycle_len = len(dratios.index.levels[0]) * (len(dratios.index.levels[1]) - 1)
+    elif kind == 'pairs':
+        # one plot axis for every peer
+        n = len(dratios.index.levels[0])
+        # the color cycle length is equal to the number of pairs of peers (order doesn't
+        # matter)
+        cycle_len = n * (len(dratios.index.levels[1]) - 1) // 2
 
-    figLog.suptitle(title)
-    axesLog[0].set_xlabel('')
-    axesLog[1].set_xlabel('')
+    plotTitle = mkTitle(params)
+    try:
+        fig, axes = mkAxes(n, cycle_len, plotTitle)
+    except Exception as e:
+        raise prependErr("error configuring plot axes", e)
+    try:
+        figLog, axesLog = mkAxes(n, cycle_len, plotTitle, log=True)
+    except Exception as e:
+        raise prependErr("error configuring semi-log plot axes", e)
 
-    fig.tight_layout()
-    figLog.tight_layout()
+    drmin  = dratios.min()
+    drmax  = dratios.max()
+    drmean = dratios.mean()
 
-    plt.setp(axes[0].get_xticklabels(), visible=False)
-    plt.setp(axes[1].get_xticklabels(), visible=False)
-    plt.setp(axesLog[0].get_xticklabels(), visible=False)
-    plt.setp(axesLog[1].get_xticklabels(), visible=False)
+    for i, user in enumerate(dratios.index.levels[0]):
+        u = dratios.loc[user]
+        # k is the index of the axis we should be plotting on, based on which user
+        # we're plotting, i, and the total number of plots we want by the end, n
+        k = i % n
+        for j, peer in enumerate(u.index.levels[0]):
+            if user == peer:
+                continue
+            pall = u.loc[peer]
+            p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
+            if len(p) == 0:
+                warn(f"no data for peers {i} ({user}) and {j} ({peer}) [{tmin}, {tmax}]")
+                continue
+            factor = 0.25
+            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor*drmean, drmax + factor*drmean), ax=axes[k], label=f"Debt ratio of {j} wrt {i}")
+            if plotDot:
+                #p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
+                pass
+            p.plot(xlim=(tmin, tmax), logy=True, ax=axesLog[k], label=f"Debt ratio of {j} wrt {i}")
+        axesLog[k].set_ylim(top=drmax*1.5)
 
-    if save and outfile:
-        plt.savefig(f"plots-new/{outfile}.pdf")
-    if show:
-        plt.show()
+    try:
+        cfgAxes(axes)
+    except Exception as e:
+        raise prependErr("configuring axis post-plot", e)
+    try:
+        cfgAxes(axesLog, log=True)
+    except Exception as e:
+        raise prependErr("configuring semi-log axis post-plot", e)
 
-    plt.clf()
-    plt.close()
+    if outfilePrefix is not None:
+        fig.set_tight_layout(False)
+        fig.savefig(f'{outfilePrefix}.pdf', bbox_inches='tight')
+        figLog.set_tight_layout(False)
+        figLog.savefig(f'{outfilePrefix}-semilog.pdf')
+
+def mkTitle(params):
+    rfList = params['strategy']
+    if rfList.nunique() == 1:
+        rfTitle = "RF"
+        rfs = rfList[0]
+    else:
+        rfTitle = "RFs"
+        rfs = ', '.join(rfList)
+    rfStr = f"{rfTitle}: {rfs.title()}"
+
+    bwList = params['upload_bandwidth']
+    if bwList.nunique() == 1:
+        bwTitle = "BW"
+        bws = bwList[0]
+    else:
+        bwTitle = "BWs"
+        bws = ', '.join(bwList)
+    bwStr = f"{bwTitle}: {bws.title()}"
+
+    rbList = params['round_burst']
+    if rbList.nunique() == 1:
+        rbTitle = "RF"
+        rbs = rbList[0]
+    else:
+        rbTitle = "RFs"
+        rbs = ', '.join(rbList)
+    rbStr = f"{rbTitle}: {rbs.title()}"
+
+    return f"Debt Ratio vs. Time -- {rfStr}, {bwStr}, {rbStr}"
+
+def mkAxes(n, cycle_len, plotTitle, log=False):
+    """
+    Create and configure `n` axes for a given debt ratio plot.
+    Inputs:
+        -   `n :: int`: Number of sub-plots to create.
+        -   `plotTitle :: str`: Title of this plot.
+        -   `log :: bool`: Whether the y-axis will be logarithmic.
+    Returns:
+        -   `[Axes]`: List containing the `n` axes.
+    """
+
+    fig, axes = plt.subplots(n)
+    if n == 1:
+        axes = [axes]
+
+    colors = ['black', 'magenta', 'blue', 'red', 'orange', 'green']
+    for i, ax in enumerate(axes):
+        ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
+
+        title = f"User {i}"
+        ylabel = "Debt Ratio"
+
+        axArgs = { 'fontsize' : 'medium',
+                   'bbox': { 'boxstyle'  : 'round',
+                             'facecolor' : ax.get_facecolor(),
+                             'edgecolor' : '#000000',
+                             'linewidth' : 1,
+                            },
+                 }
+        ax.set_title(title, **axArgs)
+
+        titleArgs = { 'fontsize' : 'large',
+                      'x'        : (ax.get_position().xmin+ax.get_position().xmax) / 2,
+                      'y'        : 1.02,
+                      'ha'       : 'center',
+                      'bbox': { 'boxstyle'  : 'round',
+                               'facecolor' : ax.get_facecolor(),
+                               'edgecolor' : '#000000',
+                               'linewidth' : 1,
+                              },
+                    }
+        if log:
+            ax.set_ylabel(f"log({ylabel})")
+            fig.suptitle(f"{plotTitle} (Semi-Log)", **titleArgs)
+        else:
+            ax.set_ylabel(ylabel)
+            fig.suptitle(plotTitle, **titleArgs)
+    fig.subplots_adjust(hspace=0.5)
+
+    return fig, axes
+
+def cfgAxes(axes, log=False):
+    for i, ax in enumerate(axes):
+        ax.legend(prop={'size': 'medium'})
+        if i != len(axes) - 1:
+            ax.set_xlabel('')
+            plt.setp(ax.get_xticklabels(), visible=False)
+        else:
+            ax.set_xlabel("time (seconds)")
+        if log:
+            ax.set_yscale('symlog')
+
+def warn(msg):
+    print(f"warning: {msg}", file=sys.stderr)
+
+def prependErr(msg, e):
+    return type(e)(f"error {msg}: {e}").with_traceback(sys.exc_info()[2])
 
 if __name__ == '__main__':
-    aggregate, history = main(sys.argv[1:])
+    r = main(sys.argv[1:])
+    ls = r['ledgers']
+    p0, p1, p2 = ls.index.levels[0]
