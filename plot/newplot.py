@@ -124,15 +124,17 @@ def plot(dratios, kind='all', trange=None, prange=None):
         ti, tf = 0, len(time) - 1
     tmin, tmax = time[[ti, tf]]
 
+    plotDot = True
     if kind == 'all':
         # only make a single plot axis
         n = 1
-        # cycle length is equal to the number of pairs of peers (order matters)
+        # the color cycle length is equal to the number of pairs of peers (order matters)
         cycle_len = len(dratios.index.levels[0]) * (len(dratios.index.levels[1]) - 1)
     elif kind == 'pairs':
         # one plot axis for every peer
         n = len(dratios.index.levels[0])
-        # cycle length is equal to the number of pairs of peers (order doesn't matter)
+        # the color cycle length is equal to the number of pairs of peers (order doesn't
+        # matter)
         cycle_len = n * (len(dratios.index.levels[1]) - 1) // 2
 
     plotTitle = "Testing"
@@ -164,7 +166,9 @@ def plot(dratios, kind='all', trange=None, prange=None):
                 continue
             factor = 0.25
             p.plot(xlim=(tmin, tmax), ylim=(drmin - factor*drmean, drmax + factor*drmean), ax=axes[k], label=f"Debt ratio of {j} wrt {i}")
-            # p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
+            if plotDot:
+                #p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
+                pass
             p.plot(xlim=(tmin, tmax), logy=True, ax=axesLog[k], label=f"Debt ratio of {j} wrt {i}")
         axesLog[k].set_ylim(top=drmax*1.5)
 
