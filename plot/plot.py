@@ -10,9 +10,10 @@ import warnings
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from matplotlib import rcParams
+from collections import OrderedDict
 from os.path import splitext
 from math import floor, ceil
+from matplotlib import rcParams
 from pandas.io.json import json_normalize
 
 plt.style.use('ggplot')
@@ -203,34 +204,20 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
         figLog.savefig(f'{outfilePrefix}-semilog.pdf', bbox_inches='tight')
 
 def mkTitle(params):
-    rfList = params['strategy']
-    if rfList.nunique() == 1:
-        rfTitle = "RF"
-        rfs = rfList[0]
-    else:
-        rfTitle = "RFs"
-        rfs = ', '.join(rfList)
-    rfStr = f"{rfTitle}: {rfs.title()}"
+    paramTitles = OrderedDict()
+    paramTitles['strategy']         = 'RF'
+    paramTitles['upload_bandwidth'] = 'BW'
+    paramTitles['round_burst']      = 'RB'
 
-    bwList = params['upload_bandwidth']
-    if bwList.nunique() == 1:
-        bwTitle = "BW"
-        bws = bwList[0]
-    else:
-        bwTitle = "BWs"
-        bws = ', '.join(bwList)
-    bwStr = f"{bwTitle}: {bws.title()}"
+    pts = []
+    for p, t in paramTitles.items():
+        vals = params[p]
+        if vals.nunique() == 1:
+            pts.append(f"{t}: {vals[0].title()}")
+        else:
+            pts.append(f"{t}s: {', '.join(vals).title()}")
 
-    rbList = params['round_burst']
-    if rbList.nunique() == 1:
-        rbTitle = "RF"
-        rbs = rbList[0]
-    else:
-        rbTitle = "RFs"
-        rbs = ', '.join(rbList)
-    rbStr = f"{rbTitle}: {rbs.title()}"
-
-    return f"Debt Ratio vs. Time -- {rfStr}, {bwStr}, {rbStr}"
+    return f"Debt Ratio vs. Time -- {', '.join(pts)}"
 
 def mkAxes(n, cycle_len, plotTitle, log=False):
     """
@@ -251,9 +238,8 @@ def mkAxes(n, cycle_len, plotTitle, log=False):
     for i, ax in enumerate(axes):
         ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
 
-        ylabel = "Debt Ratio"
-
         if n > 1:
+            # if there are multiple plots in this figure, give each one a unique subtitle
             title = f"User {i}"
             axArgs = { 'fontsize' : 'medium',
                        'bbox': { 'boxstyle'  : 'round',
@@ -264,11 +250,12 @@ def mkAxes(n, cycle_len, plotTitle, log=False):
                      }
             ax.set_title(title, **axArgs)
 
+        ylabel = "Debt Ratio"
         titleArgs = { 'fontsize' : 'large',
                       'x'        : (ax.get_position().xmin+ax.get_position().xmax) / 2,
                       'y'        : 1.02,
                       'ha'       : 'center',
-                      'bbox': { 'boxstyle'  : 'round',
+                      'bbox': { 'boxstyle' : 'round',
                                'facecolor' : ax.get_facecolor(),
                                'edgecolor' : '#000000',
                                'linewidth' : 1,
@@ -280,6 +267,7 @@ def mkAxes(n, cycle_len, plotTitle, log=False):
         else:
             ax.set_ylabel(ylabel)
             fig.suptitle(plotTitle, **titleArgs)
+
     fig.subplots_adjust(hspace=0.5)
 
     return fig, axes
@@ -289,6 +277,7 @@ def cfgAxes(axes, log=False):
     Configure axes settings that must be set after plotting (e.g. because the
     pandas plotting function overwrites them).
     """
+
     for i, ax in enumerate(axes):
         ax.legend(prop={'size': 'medium'})
         if i != len(axes) - 1:
