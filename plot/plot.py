@@ -21,7 +21,7 @@ rcParams['axes.titlepad'] = 4
 
 """
 TODO:
-
+    -   plotDot
 """
 
 def main(argv):
@@ -200,7 +200,7 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
         fig.set_tight_layout(False)
         fig.savefig(f'{outfilePrefix}.pdf', bbox_inches='tight')
         figLog.set_tight_layout(False)
-        figLog.savefig(f'{outfilePrefix}-semilog.pdf')
+        figLog.savefig(f'{outfilePrefix}-semilog.pdf', bbox_inches='tight')
 
 def mkTitle(params):
     rfList = params['strategy']
@@ -251,17 +251,18 @@ def mkAxes(n, cycle_len, plotTitle, log=False):
     for i, ax in enumerate(axes):
         ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
 
-        title = f"User {i}"
         ylabel = "Debt Ratio"
 
-        axArgs = { 'fontsize' : 'medium',
-                   'bbox': { 'boxstyle'  : 'round',
-                             'facecolor' : ax.get_facecolor(),
-                             'edgecolor' : '#000000',
-                             'linewidth' : 1,
-                            },
-                 }
-        ax.set_title(title, **axArgs)
+        if n > 1:
+            title = f"User {i}"
+            axArgs = { 'fontsize' : 'medium',
+                       'bbox': { 'boxstyle'  : 'round',
+                                 'facecolor' : ax.get_facecolor(),
+                                 'edgecolor' : '#000000',
+                                 'linewidth' : 1,
+                                },
+                     }
+            ax.set_title(title, **axArgs)
 
         titleArgs = { 'fontsize' : 'large',
                       'x'        : (ax.get_position().xmin+ax.get_position().xmax) / 2,
@@ -284,6 +285,10 @@ def mkAxes(n, cycle_len, plotTitle, log=False):
     return fig, axes
 
 def cfgAxes(axes, log=False):
+    """
+    Configure axes settings that must be set after plotting (e.g. because the
+    pandas plotting function overwrites them).
+    """
     for i, ax in enumerate(axes):
         ax.legend(prop={'size': 'medium'})
         if i != len(axes) - 1:
@@ -293,6 +298,9 @@ def cfgAxes(axes, log=False):
             ax.set_xlabel("time (seconds)")
         if log:
             ax.set_yscale('symlog')
+            if len(axes) > 1:
+                yticks = ax.get_yticks()
+                ax.set_yticks([yticks[i] for i in range(len(yticks)) if i % 2 == 0])
 
 def warn(msg):
     print(f"warning: {msg}", file=sys.stderr)
