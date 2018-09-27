@@ -85,7 +85,6 @@ iptb start --wait
 
 results_prefix="results/$test_num/$results_dir/"
 mkdir -p "$results_prefix"
-rm -f ${results_prefix}/*
 
 if [[ -v strategies[@] ]]; then
     iptb run -- ipfs config --json -- Experimental.BitswapStrategyEnabled true
@@ -176,5 +175,7 @@ for ((i=0; i < num_nodes; i++)); do
     sponge "${results_prefix}ledgers_$i"
 done
 
-jq -s '.' ${results_prefix}ledgers_* > "${results_prefix%?}"
+outfile="${results_prefix%?}.json"
+rm -f $outfile
+jq -s '.' ${results_prefix}ledgers_* > $outfile
 rm -f ${results_prefix}ledgers_*
