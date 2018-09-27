@@ -7,9 +7,12 @@ import json
 import traceback
 import warnings
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
+from itertools import islice
 from collections import OrderedDict
 from os.path import splitext
 from math import floor, ceil
@@ -129,6 +132,7 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
         -   `prange :: (float, float)`
     """
 
+    colors = ['magenta', 'green', 'black', 'blue', 'orange', 'red']
     dratios.index = dratios.index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
     time = dratios.index.levels[2]
     if trange is not None:
@@ -155,11 +159,11 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
 
     plotTitle = mkTitle(params)
     try:
-        fig, axes = mkAxes(n, cycle_len, plotTitle)
+        fig, axes = mkAxes(n, cycle_len, plotTitle, colors)
     except Exception as e:
         raise prependErr("error configuring plot axes", e)
     try:
-        figLog, axesLog = mkAxes(n, cycle_len, plotTitle, log=True)
+        figLog, axesLog = mkAxes(n, cycle_len, plotTitle, colors, log=True)
     except Exception as e:
         raise prependErr("error configuring semi-log plot axes", e)
 
@@ -167,11 +171,14 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
     drmax  = dratios.max()
     drmean = dratios.mean()
 
+    extend = 0
     for i, user in enumerate(dratios.index.levels[0]):
         u = dratios.loc[user]
         # k is the index of the axis we should be plotting on, based on which user
         # we're plotting, i, and the total number of plots we want by the end, n
         k = i % n
+        ax = axes[k]
+        axLog = axesLog[k]
         for j, peer in enumerate(u.index.levels[0]):
             if user == peer:
                 continue
@@ -181,12 +188,33 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
                 warn(f"no data for peers {i} ({user}) and {j} ({peer}) [{tmin}, {tmax}]")
                 continue
             factor = 0.25
-            p.plot(xlim=(tmin, tmax), ylim=(drmin - factor*drmean, drmax + factor*drmean), ax=axes[k], label=f"Debt ratio of {j} wrt {i}")
+            xmin, xmax = tmin, tmax
+            ymin, ymax = drmin - factor*drmean, drmax + factor*drmean
+            p.plot(xlim=(xmin, xmax), ylim=(ymin, ymax), ax=ax, label=f"Debt ratio of {j} wrt {i}")
+            p.plot(xlim=(xmin, xmax), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
             if plotDot:
-                #p.plot(x=p.loc[tmax], y='value', ax=ax, style='bx', label='point')
-                pass
-            p.plot(xlim=(tmin, tmax), logy=True, ax=axesLog[k], label=f"Debt ratio of {j} wrt {i}")
-        axesLog[k].set_ylim(top=drmax*1.5)
+                    inner = p.iloc[[-1]]
+                    t, d = inner.index[0], inner.iloc[0]
+
+                    pjall = dratios.loc[peer].loc[user]
+                    dj = pjall[pjall.index <= t].iloc[[-1]].iloc[0]
+
+                    msize = 10
+                    ax.plot(t, d, color=colors[2*i+(j if j < i else j-1)], marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
+                    ax.plot(t, d, color=colors[(2*j+(i if i < j else i-1))], marker='o', markersize=d*msize, markeredgecolor='black')
+                    extend = max(extend, (d+dj)*msize/2)
+
+                    if d > 1:
+                        dLog = np.log(d)
+                    else:
+                        dLog = d
+
+                    axLog.plot(t, dLog, color=colors[2*i+(j if j < i else j-1)], marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
+                    axLog.plot(t, dLog, color=colors[(2*j+(i if i < j else i-1))], marker='o', markersize=d*msize, markeredgecolor='black')
+
+        extendAxis(ax, extend)
+        extendAxis(axLog, extend, log=True)
+        axLog.set_ylim(top=drmax*1.5)
 
     try:
         cfgAxes(axes)
@@ -199,9 +227,20 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
 
     if outfilePrefix is not None:
         fig.set_tight_layout(False)
-        fig.savefig(f'{outfilePrefix}.pdf', bbox_inches='tight')
+        pdfOut = f'{outfilePrefix}.pdf'
+        fig.savefig(pdfOut, bbox_inches='tight')
+
         figLog.set_tight_layout(False)
-        figLog.savefig(f'{outfilePrefix}-semilog.pdf', bbox_inches='tight')
+        pdfOutLog = f'{outfilePrefix}-semilog.pdf'
+        figLog.savefig(pdfOutLog, bbox_inches='tight')
+
+def extendAxis(ax, amt, log=False):
+    xright = ax.get_xlim()[1]
+    ax.set_xlim(right=xright+amt)
+    ybottom = ax.get_ylim()[0]
+    if not log:
+        # TODO: need a better way to do this
+        ax.set_ylim(bottom=ybottom-amt*50000)
 
 def mkTitle(params):
     paramTitles = OrderedDict()
@@ -219,7 +258,7 @@ def mkTitle(params):
 
     return f"Debt Ratio vs. Time -- {', '.join(pts)}"
 
-def mkAxes(n, cycle_len, plotTitle, log=False):
+def mkAxes(n, cycle_len, plotTitle, colors, log=False):
     """
     Create and configure `n` axes for a given debt ratio plot.
     Inputs:
@@ -234,7 +273,6 @@ def mkAxes(n, cycle_len, plotTitle, log=False):
     if n == 1:
         axes = [axes]
 
-    colors = ['black', 'magenta', 'blue', 'red', 'orange', 'green']
     for i, ax in enumerate(axes):
         ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
 
