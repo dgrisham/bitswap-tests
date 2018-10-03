@@ -78,8 +78,6 @@ if ((${#bw_dist[@]} > 0)); then
     fi
 fi
 
-source "tests/test-$test_num.sh"
-
 yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
 iptb start --wait
 
@@ -129,6 +127,7 @@ for ((i=0; i< num_nodes; i++)); do
 done
 
 # run test body
+source "tests/test-$test_num.sh"
 body
 
 # grab debt ratio update events from logs
