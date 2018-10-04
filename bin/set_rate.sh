@@ -29,6 +29,7 @@ while getopts ":i:n:f:u:d:" opt; do
 done
 shift $((OPTIND-1))
 
+hz=100
 ext=$(iptb attr get $node_num ifname)
 [[ -z "$ext" ]] && exit 1
 # each interfaces gets its own rate limiter
@@ -53,4 +54,4 @@ sudo ifconfig $ifb up
 # forward all ingress traffic to the ifb device
 tc filter add dev $ext parent ffff: protocol all u32 match u32 0 0 action mirred egress redirect dev $ifb
 # create *egress* filter on the IFB device
-tc qdisc add dev $ifb root tbf rate "${ext_up}kbit" burst $ext_up limit 100000
+tc qdisc add dev $ifb root tbf rate "${ext_up}kbit" burst "$((ext_up / hz))kbit" limit ${ext_up}
