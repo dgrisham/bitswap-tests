@@ -110,9 +110,9 @@ fi
 if [[ -v bw_dist[@] ]]; then
     for bw in ${bw_dist[@]}; do
         if [[ "$k" -eq 0 ]]; then
-            [[ "$bw" != "-1" ]] && scripts/set_rates.sh -i -n$k -u$bw
+            [[ "$bw" != "-1" ]] && bin/set_rates.sh -i -n$k -u$bw
         fi
-        [[ "$bw" != "-1" ]] && scripts/set_rates.sh -n$k -u$bw
+        [[ "$bw" != "-1" ]] && bin/set_rates.sh -n$k -u$bw
         ((++k))
     done
     results_prefix+="bw_$(echo ${bw_dist[@]} | sed 's/ /_/g')-"
