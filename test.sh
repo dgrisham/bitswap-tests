@@ -58,15 +58,15 @@ if ((${#strategies[@]} > 0)); then
         echo "error: specified ${#strategies[@]} strategies. should be 0, 1 or $num_nodes"
         exit 1
     fi
+    if ((${#round_bursts[@]} == 1)); then
+        rb=${round_bursts[0]}
+        round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
+    elif ((${#round_bursts[@]} != num_nodes)); then
+        echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes"
+        exit 1
+    fi
 fi
 
-if ((${#round_bursts[@]} == 1)); then
-    rb=${round_bursts[0]}
-    round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
-elif ((${#round_bursts[@]} != num_nodes)); then
-    echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes"
-    exit 1
-fi
 
 if ((${#bw_dist[@]} > 0)); then
     if ((${#bw_dist[@]} == 1)); then
@@ -91,8 +91,8 @@ if [[ -v strategies[@] ]]; then
     k=0
     for s in ${strategies[@]}; do
         echo "$k"' -- ipfs config --json -- Experimental.BitswapStrategy \"'"$s"'\"'
-        ((++k))
-    done | iptb run
+        ((k++))
+    done | iptb run >/dev/null
     results_prefix+="${strategies[0]}-"
     # NOTE: replace above with this second version if supporting heterogeneous strategies
     # results_prefix+="$(echo ${strategies[i]} | sed 's/ /_/g')-"
@@ -101,19 +101,25 @@ if [[ -v strategies[@] ]]; then
         k=0
         for rb in ${round_bursts[@]}; do
             echo "$k -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb"
-            ((++k))
-        done | iptb run
+            ((k++))
+        done | iptb run >/dev/null
         results_prefix+="rb_$(echo ${round_bursts[@]} | sed 's/ /_/g')-"
     fi
 fi
 
 if [[ -v bw_dist[@] ]]; then
+    i=0
+    ifnum=0
     for bw in ${bw_dist[@]}; do
-        if [[ "$k" -eq 0 ]]; then
-            [[ "$bw" != "-1" ]] && bin/set_rates.sh -i -n$k -u$bw
+        if (( bw != -1 )); then
+            if ((ifnum == 0)); then
+                bin/set_rate.sh -i$num_nodes -n$i -f$ifnum -u$bw
+            else
+                bin/set_rate.sh -n$i -f$ifnum -u$bw
+            fi
+            ((ifnum++))
         fi
-        [[ "$bw" != "-1" ]] && bin/set_rates.sh -n$k -u$bw
-        ((++k))
+        ((i++))
     done
     results_prefix+="bw_$(echo ${bw_dist[@]} | sed 's/ /_/g')-"
 fi
