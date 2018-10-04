@@ -113,9 +113,9 @@ if [[ -v bw_dist[@] ]]; then
     for bw in ${bw_dist[@]}; do
         if (( bw != -1 )); then
             if ((ifnum == 0)); then
-                scripts/set_rates.sh -i$num_nodes -n$i -f$ifnum -u$bw
+                bin/set_rate.sh -i$num_nodes -n$i -f$ifnum -u$bw
             else
-                scripts/set_rates.sh -n$i -f$ifnum -u$bw
+                bin/set_rate.sh -n$i -f$ifnum -u$bw
             fi
             ((ifnum++))
         fi
