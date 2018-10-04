@@ -7,7 +7,7 @@
 
 body() {
     # connect nodes
-    until iptb connect 0 "[1,$((num_nodes-1))]"; do :; done
+    iptb connect 0 "[1,$((num_nodes-1))]"
 
     declare -a cids
     declare -ag uploads
@@ -27,12 +27,6 @@ body() {
         getCmds+="0 -- ipfs get ${cids[i]}\n"
     done
     getCmds+="[1,$((num_nodes-1))] -- ipfs get ${cids[0]}"
-
-    # echo -e "$getCmds" | iptb run |
-    #    perl -p -e 's/node\[(\d)\].*?$/\1/' |
-    #    sed -e '/^$/d' |
-    #    grep -oP '((^\d)|(Qm.*?)|([0-9ms]+))$' |
-    #    sed 'N;N;s/\n/,/g' > "${results_prefix}aggregate"
 
     # Request files, gather stats
     declare -Ag dl_times
