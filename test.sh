@@ -58,15 +58,15 @@ if ((${#strategies[@]} > 0)); then
         echo "error: specified ${#strategies[@]} strategies. should be 0, 1 or $num_nodes"
         exit 1
     fi
+    if ((${#round_bursts[@]} == 1)); then
+        rb=${round_bursts[0]}
+        round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
+    elif ((${#round_bursts[@]} != num_nodes)); then
+        echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes"
+        exit 1
+    fi
 fi
 
-if ((${#round_bursts[@]} == 1)); then
-    rb=${round_bursts[0]}
-    round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
-elif ((${#round_bursts[@]} != num_nodes)); then
-    echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes"
-    exit 1
-fi
 
 if ((${#bw_dist[@]} > 0)); then
     if ((${#bw_dist[@]} == 1)); then
@@ -78,12 +78,13 @@ if ((${#bw_dist[@]} > 0)); then
     fi
 fi
 
+source "tests/test-$test_num.sh"
+
 yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
 iptb start --wait
 
 results_prefix="results/$test_num/$results_dir/"
 mkdir -p "$results_prefix"
-rm -f ${results_prefix}/*
 
 if [[ -v strategies[@] ]]; then
     iptb run -- ipfs config --json -- Experimental.BitswapStrategyEnabled true
@@ -91,7 +92,7 @@ if [[ -v strategies[@] ]]; then
     for s in ${strategies[@]}; do
         echo "$k"' -- ipfs config --json -- Experimental.BitswapStrategy \"'"$s"'\"'
         ((k++))
-    done | iptb run
+    done | iptb run >/dev/null
     results_prefix+="${strategies[0]}-"
     # NOTE: replace above with this second version if supporting heterogeneous strategies
     # results_prefix+="$(echo ${strategies[i]} | sed 's/ /_/g')-"
@@ -101,24 +102,25 @@ if [[ -v strategies[@] ]]; then
         for rb in ${round_bursts[@]}; do
             echo "$k -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb"
             ((k++))
-        done | iptb run
+        done | iptb run >/dev/null
         results_prefix+="rb_$(echo ${round_bursts[@]} | sed 's/ /_/g')-"
     fi
 fi
 
-i=0
-k=0
 if [[ -v bw_dist[@] ]]; then
+    i=0
+    ifnum=0
     for bw in ${bw_dist[@]}; do
-        if [[ "$bw" != "-1" ]]; then
-            if [[ "$k" -eq 0 ]]; then
-                 scripts/set_rates.sh -i$num_nodes -n$i -f$k -u$bw
+        if (( bw != -1 )); then
+            if ((ifnum == 0)); then
+                bin/set_rate.sh -i$num_nodes -n$i -f$ifnum -u$bw
+            else
+                bin/set_rate.sh -n$i -f$ifnum -u$bw
             fi
-            scripts/set_rates.sh -n$k -u$bw
-            ((k++))
+            ((ifnum++))
         fi
+        ((i++))
     done
-    ((i++))
     results_prefix+="bw_$(echo ${bw_dist[@]} | sed 's/ /_/g')-"
 fi
 
@@ -132,7 +134,6 @@ for ((i=0; i< num_nodes; i++)); do
 done
 
 # run test body
-source "tests/test-$test_num.sh"
 body
 
 # grab debt ratio update events from logs
@@ -180,5 +181,7 @@ for ((i=0; i < num_nodes; i++)); do
     sponge "${results_prefix}ledgers_$i"
 done
 
-jq -s '.' ${results_prefix}ledgers_* > "${results_prefix%?}.json"
+outfile="${results_prefix%?}.json"
+rm -f $outfile
+jq -s '.' ${results_prefix}ledgers_* > $outfile
 rm -f ${results_prefix}ledgers_*
