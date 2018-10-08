@@ -15,7 +15,7 @@ import matplotlib.patches as patches
 from itertools import islice
 from collections import OrderedDict
 from os.path import splitext
-from math import floor, ceil
+from math import floor, ceil, log10
 from matplotlib import rcParams
 from pandas.io.json import json_normalize
 
@@ -25,11 +25,20 @@ rcParams['axes.titlepad'] = 4
 
 def main(argv):
     cli = argparse.ArgumentParser()
-    cli.add_argument(
-        'infile',
-        metavar='<results_file>',
-        type=str,
-        help="json results file to load and plot",
+    rangeArgs = cli.add_mutually_exclusive_group()
+    rangeArgs.add_argument(
+        '-p',
+        '--prange',
+        nargs=2,
+        type=float,
+        help="specify lower and upper time range as percentages of total time",
+    )
+    rangeArgs.add_argument(
+        '-t',
+        '--trange',
+        nargs=2,
+        type=float,
+        help="specify lower and upper time range as literal time values",
     )
     cli.add_argument(
         '-k',
@@ -52,6 +61,12 @@ def main(argv):
         default=False,
         help="save plots",
     )
+    cli.add_argument(
+        'infile',
+        metavar='<results_file>',
+        type=str,
+        help="json results file to load and plot",
+    )
     args = cli.parse_args(argv)
 
     try:
@@ -61,12 +76,23 @@ def main(argv):
         traceback.print_exc()
         sys.exit(1)
 
+    results['ledgers'].index = results['ledgers'].index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
+    time = results['ledgers'].index.levels[2]
+    if args.prange is not None:
+        ti = floor(args.prange[0] * len(time))
+        tf = ceil(args.prange[1] * len(time)) - 1
+    elif args.trange is not None:
+        ti, tf = trange
+    else:
+        ti, tf = 0, len(time) - 1
+    trange = time[[ti, tf]]
+
     try:
         if args.save:
-            plot(results['ledgers']['value'], results['params'], kind=args.kind, prange=(0,1),
-                    outfilePrefix=f'{splitext(args.infile)[0]}-{args.kind}')
+            plot(results['ledgers'], results['params'], args.kind, trange,
+                 outfilePrefix=f'{splitext(args.infile)[0]}-{args.kind}')
         else:
-            plot(results['ledgers']['value'], results['params'], kind=args.kind, prange=(0,1))
+            plot(results['ledgers'], results['params'], args.kind, trange)
         if not args.no_show:
             plt.show()
             plt.clf()
@@ -108,7 +134,7 @@ def load(fname):
 
     return {'params': params, 'uploads': uploads, 'dl_times': dl_times, 'ledgers': ledgers}
 
-def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=None):
+def plot(ledgers, params, kind, trange, outfilePrefix=None):
     """
     Purpose
         Plots debt ratios (stored in `ls`, aka ledgers) from either:
@@ -130,93 +156,126 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
         -   `prange :: (float, float)`
     """
 
-    colors = ['magenta', 'green', 'black', 'blue', 'orange', 'red']
-    dratios.index = dratios.index.map(lambda idx: (idx[0], idx[1], idx[2].total_seconds()))
-    time = dratios.index.levels[2]
-    if trange is not None:
-        ti, tf = trange
-    elif prange is not None:
-        ti = floor(prange[0] * len(time))
-        tf = ceil(prange[1] * len(time)) - 1
-    else:
-        ti, tf = 0, len(time) - 1
-    tmin, tmax = time[[ti, tf]]
-
     plotDot = True
+    tmin, tmax = trange
+    time = ledgers.index.levels[2]
+
+    # figure out how many peers have a history in this data range
+    pairs = 0
+    for user in ledgers.index.levels[0]:
+        u = ledgers.loc[user]
+        for peer in u.index.levels[0]:
+            if user == peer:
+                continue
+            p = u.loc[peer]
+            if len(p[(tmin <= p.index) & (p.index <= tmax)]) > 0:
+                pairs += 1
+
     if kind == 'all':
         # only make a single plot axis
         n = 1
         # the color cycle length is equal to the number of pairs of peers (order matters)
-        cycle_len = len(dratios.index.levels[0]) * (len(dratios.index.levels[1]) - 1)
+        cycleLen = pairs
     elif kind == 'pairs':
         # one plot axis for every peer
-        n = len(dratios.index.levels[0])
+        n = pairs // 4
         # the color cycle length is equal to the number of pairs of peers (order doesn't
         # matter)
-        cycle_len = n * (len(dratios.index.levels[1]) - 1) // 2
+        cycleLen = pairs // 2
+
+    colorMap = OrderedDict({
+                'magenta' : 'black',
+                'green'   : 'orange',
+                'black'   : 'magenta',
+                'blue'    : 'red',
+                'orange'  : 'green',
+                'red'     : 'blue'
+               })
+    numPairs = 0
+    colors = []
+    i = 0
+    for c1, c2 in colorMap.items():
+        if c2 not in colors:
+            if numPairs < pairs:
+                colors.append(c1)
+                numPairs += 2
+        else:
+            colors.append(c1)
+    colorMap = { c1:c2 for c1, c2 in colorMap.items() if c1 in colors and c2 in colors }
 
     plotTitle = mkTitle(params)
     try:
-        fig, axes = mkAxes(n, cycle_len, plotTitle, colors)
+        fig, axes = mkAxes(n, cycleLen, plotTitle, colors)
     except Exception as e:
         raise prependErr("error configuring plot axes", e)
     try:
-        figLog, axesLog = mkAxes(n, cycle_len, plotTitle, colors, log=True)
+        figLog, axesLog = mkAxes(n, cycleLen, plotTitle, colors, log=True)
     except Exception as e:
         raise prependErr("error configuring semi-log plot axes", e)
 
-    drmin  = dratios.min()
-    drmax  = dratios.max()
-    drmean = dratios.mean()
+    drmin  = ledgers['value'].min()
+    drmax  = ledgers['value'].max()
+    drmean = ledgers['value'].mean()
 
     extend = 0
-    for i, user in enumerate(dratios.index.levels[0]):
-        u = dratios.loc[user]
+    i = 0
+    if plotDot:
+        # maintain the index of the current plot color
+        c = 0
+    for user in ledgers.index.levels[0]:
+        u = ledgers.loc[user]
         # k is the index of the axis we should be plotting on, based on which user
         # we're plotting, i, and the total number of plots we want by the end, n
         k = i % n
         ax = axes[k]
         axLog = axesLog[k]
-        for j, peer in enumerate(u.index.levels[0]):
+        j = 0
+        for peer in u.index.levels[0]:
             if user == peer:
                 continue
             pall = u.loc[peer]
             p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
             if len(p) == 0:
-                warn(f"no data for peers {i} ({user}) and {j} ({peer}) [{tmin}, {tmax}]")
+                warn(f"no data for peers {i} ({user}) and {j} ({peer}) in [{tmin}, {tmax}]")
                 continue
             factor = 0.25
             xmin, xmax = tmin, tmax
             ymin, ymax = drmin - factor*drmean, drmax + factor*drmean
-            p.plot(xlim=(xmin, xmax), ylim=(ymin, ymax), ax=ax, label=f"Debt ratio of {j} wrt {i}")
-            p.plot(xlim=(xmin, xmax), logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
+            p.plot(y='value', xlim=(xmin, xmax), ylim=(ymin, ymax), ax=ax,
+                   label=f"Debt ratio of {j} wrt {i}")
+            p.plot(y='value', xlim=(xmin, xmax), logy=True, ax=axLog,
+                   label=f"Debt ratio of {j} wrt {i}")
             if plotDot:
                     inner = p.iloc[[-1]]
-                    t, d = inner.index[0], inner.iloc[0]
+                    t, d = inner.index[0], inner.iloc[0]['value']
+                    recv = inner['recv'].item()
+                    sent = inner['sent'].item()
+                    ri = recv / 10 ** int(log10(recv)) if recv > 0 else 0
+                    ro = sent / 10 ** int(log10(sent)) if sent > 0 else 0
 
-                    pjall = dratios.loc[peer].loc[user]
-                    dj = pjall[pjall.index <= t].iloc[[-1]].iloc[0]
-
-                    msize = 10
-                    ax.plot(t, d, color=colors[2*i+(j if j < i else j-1)],
-                            marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
-                    ax.plot(t, d, color=colors[(2*j+(i if i < j else i-1))],
-                            marker='o', markersize=d*msize, markeredgecolor='black')
-                    extend = max(extend, (d+dj)*msize/2)
+                    msize = 5
+                    ax.plot(t, d, color=colors[c], marker='o', markersize=(ri+ro)*msize,
+                            markeredgecolor='black')
+                    ax.plot(t, d, color=colorMap[colors[c]], marker='o', markersize=ri*msize,
+                            markeredgecolor='black')
+                    extend = max(extend, (ri+ro)*msize/2)
 
                     if d > 1:
                         dLog = np.log(d)
                     else:
                         dLog = d
 
-                    axLog.plot(t, dLog, color=colors[2*i+(j if j < i else j-1)],
-                               marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
-                    axLog.plot(t, dLog, color=colors[(2*j+(i if i < j else i-1))],
-                               marker='o', markersize=d*msize, markeredgecolor='black')
+                    axLog.plot(t, dLog, color=colors[c],
+                               marker='o', markersize=(ri+ro)*msize, markeredgecolor='black')
+                    axLog.plot(t, dLog, color=colorMap[colors[c]],
+                               marker='o', markersize=ri*msize, markeredgecolor='black')
+                    c += 1
+            j += 1
 
         extendAxis(ax, extend)
         extendAxis(axLog, extend, log=True)
         axLog.set_ylim(top=drmax*1.5)
+        i += 1
 
     try:
         cfgAxes(axes)
@@ -260,7 +319,7 @@ def mkTitle(params):
 
     return f"Debt Ratio vs. Time -- {', '.join(pts)}"
 
-def mkAxes(n, cycle_len, plotTitle, colors, log=False):
+def mkAxes(n, cycleLen, plotTitle, colors, log=False):
     """
     Create and configure `n` axes for a given debt ratio plot.
     Inputs:
@@ -276,7 +335,7 @@ def mkAxes(n, cycle_len, plotTitle, colors, log=False):
         axes = [axes]
 
     for i, ax in enumerate(axes):
-        ax.set_prop_cycle('color', colors[2*i : 2*i + cycle_len])
+        ax.set_prop_cycle('color', colors[2*i : 2*i + cycleLen])
 
         if n > 1:
             # if there are multiple plots in this figure, give each one a unique subtitle
