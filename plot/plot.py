@@ -23,11 +23,6 @@ plt.style.use('ggplot')
 rcParams.update({'figure.autolayout': True})
 rcParams['axes.titlepad'] = 4
 
-"""
-TODO:
-    -   plotDot
-"""
-
 def main(argv):
     cli = argparse.ArgumentParser()
     cli.add_argument(
@@ -98,9 +93,12 @@ def load(fname):
 
     # load results into separate dataframes
     params = pd.DataFrame.from_records(jdata, exclude=['uploads', 'dl_times', 'history'], index='id')
-    uploads  = pd.concat([json_normalize(data=pdata, record_path='uploads',  meta='id') for pdata in jdata]).set_index('id')
-    dl_times = pd.concat([json_normalize(data=pdata, record_path='dl_times', meta='id') for pdata in jdata]).set_index(['id', 'block'])
-    ledgers  = pd.concat([json_normalize(data=pdata, record_path='history',  meta='id') for pdata in jdata])
+    uploads  = pd.concat([json_normalize(data=pdata, record_path='uploads',  meta='id')
+                          for pdata in jdata]).set_index('id')
+    dl_times = pd.concat([json_normalize(data=pdata, record_path='dl_times', meta='id')
+                          for pdata in jdata]).set_index(['id', 'block'])
+    ledgers  = pd.concat([json_normalize(data=pdata, record_path='history',  meta='id')
+                          for pdata in jdata])
 
     # use relative times for debt ratio update timestamps
     ledgers['time'] = ledgers['time'].apply(pd.to_datetime)
@@ -200,8 +198,10 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
                     dj = pjall[pjall.index <= t].iloc[[-1]].iloc[0]
 
                     msize = 10
-                    ax.plot(t, d, color=colors[2*i+(j if j < i else j-1)], marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
-                    ax.plot(t, d, color=colors[(2*j+(i if i < j else i-1))], marker='o', markersize=d*msize, markeredgecolor='black')
+                    ax.plot(t, d, color=colors[2*i+(j if j < i else j-1)],
+                            marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
+                    ax.plot(t, d, color=colors[(2*j+(i if i < j else i-1))],
+                            marker='o', markersize=d*msize, markeredgecolor='black')
                     extend = max(extend, (d+dj)*msize/2)
 
                     if d > 1:
@@ -209,8 +209,10 @@ def plot(dratios, params, kind='all', trange=None, prange=None, outfilePrefix=No
                     else:
                         dLog = d
 
-                    axLog.plot(t, dLog, color=colors[2*i+(j if j < i else j-1)], marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
-                    axLog.plot(t, dLog, color=colors[(2*j+(i if i < j else i-1))], marker='o', markersize=d*msize, markeredgecolor='black')
+                    axLog.plot(t, dLog, color=colors[2*i+(j if j < i else j-1)],
+                               marker='o', markersize=(d+dj)*msize, markeredgecolor='black')
+                    axLog.plot(t, dLog, color=colors[(2*j+(i if i < j else i-1))],
+                               marker='o', markersize=d*msize, markeredgecolor='black')
 
         extendAxis(ax, extend)
         extendAxis(axLog, extend, log=True)

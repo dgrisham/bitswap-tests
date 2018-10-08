@@ -90,7 +90,7 @@ if [[ -v strategies[@] ]]; then
     k=0
     for s in ${strategies[@]}; do
         echo "$k"' -- ipfs config --json -- Experimental.BitswapStrategy \"'"$s"'\"'
-        ((++k))
+        ((k++))
     done | iptb run
     results_prefix+="${strategies[0]}-"
     # NOTE: replace above with this second version if supporting heterogeneous strategies
@@ -100,20 +100,25 @@ if [[ -v strategies[@] ]]; then
         k=0
         for rb in ${round_bursts[@]}; do
             echo "$k -- ipfs config --json -- Experimental.BitswapRRQRoundBurst $rb"
-            ((++k))
+            ((k++))
         done | iptb run
         results_prefix+="rb_$(echo ${round_bursts[@]} | sed 's/ /_/g')-"
     fi
 fi
 
+i=0
+k=0
 if [[ -v bw_dist[@] ]]; then
     for bw in ${bw_dist[@]}; do
-        if [[ "$k" -eq 0 ]]; then
-            [[ "$bw" != "-1" ]] && scripts/set_rates.sh -i -n$k -u$bw
+        if [[ "$bw" != "-1" ]]; then
+            if [[ "$k" -eq 0 ]]; then
+                 scripts/set_rates.sh -i$num_nodes -n$i -f$k -u$bw
+            fi
+            scripts/set_rates.sh -n$k -u$bw
+            ((k++))
         fi
-        [[ "$bw" != "-1" ]] && scripts/set_rates.sh -n$k -u$bw
-        ((++k))
     done
+    ((i++))
     results_prefix+="bw_$(echo ${bw_dist[@]} | sed 's/ /_/g')-"
 fi
 

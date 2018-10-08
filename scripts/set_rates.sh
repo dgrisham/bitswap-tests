@@ -3,17 +3,22 @@
 set -ex
 
 init=0
-while getopts ":in:u:d:" opt; do
+while getopts ":i:n:u:d:" opt; do
     case $opt in
         i)
-            init=1
+            [[ -z "$OPTARG" ]] && exit 1
+            num_interfaces="$OPTARG"
             ;;
         n)
+            [[ -z "$OPTARG" ]] && exit 1
             num="$((OPTARG+1))"
-            [[ -z "$num" ]] && num=1
+            ;;
+        f)
+            [[ -z "$OPTARG" ]] && exit 1
+            ifnum="$OPTARG"
             ;;
         u)
-            [[ -z "${OPTARG}kbit" ]] && exit 1
+            [[ -z "$OPTARG" ]] && exit 1
             ext_up="${OPTARG}kbit"
             ;;
         d)
@@ -34,7 +39,7 @@ shift $((OPTIND-1))
 ## Paths and definitions
 ext=$(ip link | grep -oP 'veth.*?@' | sed 's/@//' | sed "${num}q;d")
 [[ -z "$ext" ]] && exit 1
-ext_ingress="ifb$((num-1))"    # Use a unique ifb per rate limiter!
+ext_ingress="ifb$ifnum"    # Use a unique ifb per rate limiter!
             # Set these as per your provider's settings, at 90% to start with
 # ext_down=800kbit      # Max theoretical: for this example, up is 1024kbit
 # ext_up=7100kbit   # Max theoretical: for this example, down is 8192kbit
@@ -45,9 +50,9 @@ q=1514                  # HTB Quantum = 1500bytes IP + 14 bytes ethernet.
 quantum=300     # fq_codel quantum 300 gives a boost to interactive flows
             # At higher bandwidths (50Mbit+) don't bother
 
-if [[ "$init" -eq 1 ]]; then
+if [[ -n "$num_interfaces" ]]; then
     [[ ! -z $(lsmod | grep ifb) ]] && sudo modprobe -r ifb
-    sudo modprobe ifb numifbs=3
+    sudo modprobe ifb numifbs="$num_interfaces"
     sudo modprobe sch_fq_codel
     sudo modprobe act_mirred
 fi
@@ -81,7 +86,6 @@ if [[ ! -z "$ext_up" ]]; then
     tc qdisc add dev $ext_ingress root handle 1: htb default 11
 
     # Add root class HTB with rate limiting
-
     tc class add dev $ext_ingress parent 1: classid 1:1 htb rate $ext_up
     tc class add dev $ext_ingress parent 1:1 classid 1:11 htb rate $ext_up prio 0 quantum $q
 
