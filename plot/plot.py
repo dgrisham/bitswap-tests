@@ -90,7 +90,7 @@ def main(argv):
     try:
         if args.save:
             plot(results['ledgers'], results['params'], args.kind, trange,
-                 outfilePrefix=f'{splitext(args.infile)[0]}-{args.kind}')
+                outfilePrefix=f'{splitext(args.infile)[0]}-{args.kind}')
         else:
             plot(results['ledgers'], results['params'], args.kind, trange)
         if not args.no_show:
@@ -120,11 +120,11 @@ def load(fname):
     # load results into separate dataframes
     params = pd.DataFrame.from_records(jdata, exclude=['uploads', 'dl_times', 'history'], index='id')
     uploads  = pd.concat([json_normalize(data=pdata, record_path='uploads',  meta='id')
-                          for pdata in jdata]).set_index('id')
+                   for pdata in jdata]).set_index('id')
     dl_times = pd.concat([json_normalize(data=pdata, record_path='dl_times', meta='id')
-                          for pdata in jdata]).set_index(['id', 'block'])
+                   for pdata in jdata]).set_index(['id', 'block'])
     ledgers  = pd.concat([json_normalize(data=pdata, record_path='history',  meta='id')
-                          for pdata in jdata])
+                   for pdata in jdata])
 
     # use relative times for debt ratio update timestamps
     ledgers['time'] = ledgers['time'].apply(pd.to_datetime)
@@ -156,7 +156,6 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
         -   `prange :: (float, float)`
     """
 
-    plotDot = True
     tmin, tmax = trange
     time = ledgers.index.levels[2]
 
@@ -207,77 +206,19 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
     except Exception as e:
         raise prependErr("error configuring semi-log plot axes", e)
 
-    drmin  = ledgers['value'].min()
-    drmax  = ledgers['value'].max()
-    drmean = ledgers['value'].mean()
-
-    extend = 0
-    i = 0
-    if plotDot:
-        # maintain the index of the current plot color
-        c = 0
-    for user in ledgers.index.levels[0]:
-        u = ledgers.loc[user]
-        # k is the index of the axis we should be plotting on, based on which user
-        # we're plotting, i, and the total number of plots we want by the end, n
-        k = i % n
-        ax = axes[k]
-        axLog = axesLog[k]
-        j = 0
-        for peer in u.index.levels[0]:
-            if user == peer:
-                continue
-            pall = u.loc[peer]
-            p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
-            if len(p) == 0:
-                warn(f"no data for peers {i} ({user}) and {j} ({peer}) in [{tmin}, {tmax}]")
-                continue
-            factor = 0.25
-            xmin, xmax = tmin, tmax
-            ymin, ymax = drmin - factor*drmean, drmax + factor*drmean
-            p.plot(y='value', xlim=(xmin, xmax), ylim=(ymin, ymax), ax=ax,
-                   label=f"Debt ratio of {j} wrt {i}")
-            p.plot(y='value', xlim=(xmin, xmax), logy=True, ax=axLog,
-                   label=f"Debt ratio of {j} wrt {i}")
-            if plotDot:
-                    inner = p.iloc[[-1]]
-                    t, d = inner.index[0], inner.iloc[0]['value']
-                    recv = inner['recv'].item()
-                    sent = inner['sent'].item()
-                    ri = recv / 10 ** int(log10(recv)) if recv > 0 else 0
-                    ro = sent / 10 ** int(log10(sent)) if sent > 0 else 0
-
-                    msize = 5
-                    cInner, cOuter = colorMap[user, peer]
-                    ax.plot(t, d, color=cOuter, marker='o', markersize=(ri+ro)*msize,
-                            markeredgecolor='black')
-                    ax.plot(t, d, color=cInner, marker='o', markersize=ri*msize,
-                            markeredgecolor='black')
-                    extend = max(extend, (ri+ro)*msize/2)
-
-                    if d > 1:
-                        dLog = np.log(d)
-                    else:
-                        dLog = d
-
-                    axLog.plot(t, dLog, color=cOuter,
-                               marker='o', markersize=(ri+ro)*msize, markeredgecolor='black')
-                    axLog.plot(t, dLog, color=cInner,
-                               marker='o', markersize=ri*msize, markeredgecolor='black')
-                    c += 1
-            j += 1
-
-        extendAxis(ax, extend)
-        extendAxis(axLog, extend, log=True)
-        axLog.set_ylim(top=drmax*1.5)
-        i += 1
-
+    drstats = {
+        'min'  : ledgers['value'].min(),
+        'max'  : ledgers['value'].max(),
+        'mean' : ledgers['value'].mean(),
+    }
+    plotTRange(ledgers, trange, axes, axesLog, 'curve', drstats=drstats)
+    plotTRange(ledgers, trange, axes, axesLog, 'dot', colorMap=colorMap)
     try:
         cfgAxes(axes)
     except Exception as e:
         raise prependErr("configuring axis post-plot", e)
     try:
-        cfgAxes(axesLog, log=True)
+        cfgAxes(axesLog, log=True, ymax=drstats['max'])
     except Exception as e:
         raise prependErr("configuring semi-log axis post-plot", e)
 
@@ -289,6 +230,66 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
         figLog.set_tight_layout(False)
         pdfOutLog = f'{outfilePrefix}-semilog.pdf'
         figLog.savefig(pdfOutLog, bbox_inches='tight')
+
+def plotTRange(ledgers, trange, axes, axesLog, kind, **kwargs):
+    tmin, tmax = trange
+    # k is the index of the axis we should be plotting on
+    k = 0
+    for i, user in enumerate(ledgers.index.levels[0]):
+        u = ledgers.loc[user]
+        ax = axes[k]
+        axLog = axesLog[k]
+        for j, peer in enumerate(u.index.levels[0]):
+            if user == peer:
+                continue
+            pall = u.loc[peer]
+            p = pall[(tmin <= pall.index) & (pall.index <= tmax)]
+
+            if kind == 'curve':
+                if len(p) == 0:
+                    warn(f"no data for peers {i} ({user}) and {j} ({peer}) in [{tmin}, {tmax}]")
+                    continue
+                plotCurve(p, trange, i, j, ax, axLog, **kwargs)
+            elif kind == 'dot':
+                if len(p) == 0:
+                    continue
+                # abusing kwargs
+                kwargs['extend'] = plotDot(p, user, peer, ax, axLog, **kwargs)
+
+    if kind == 'dot':
+        extendAxis(ax, kwargs['extend'])
+        extendAxis(axLog, kwargs['extend'], log=True)
+
+def plotCurve(p, trange, i, j, ax, axLog, drstats):
+    factor = 0.25
+    xmin, xmax = trange
+    ymin, ymax = drstats['min'] - factor*drstats['mean'], drstats['max'] + factor*drstats['mean']
+    p.plot(y='value', xlim=(xmin, xmax), ylim=(ymin, ymax), ax=ax,
+       label=f"Debt ratio of {j} wrt {i}")
+    p.plot(y='value', xlim=(xmin, xmax), logy=True, ax=axLog,
+       label=f"Debt ratio of {j} wrt {i}")
+
+def plotDot(p, user, peer, ax, axLog, colorMap, extend=0):
+    inner = p.iloc[[-1]]
+    t, d = inner.index[0], inner.iloc[0]['value']
+    recv = inner['recv'].item()
+    sent = inner['sent'].item()
+    ri = recv / 10 ** int(log10(recv)) if recv > 0 else 0
+    ro = sent / 10 ** int(log10(sent)) if sent > 0 else 0
+
+    # TODO: figure out how to nicely scale the marker size
+    msize = 3
+    cInner, cOuter = colorMap[user, peer]
+    ax.plot(t, d, color=cOuter, marker='o', markersize=(ri+ro)*msize,
+        markeredgecolor='black')
+    ax.plot(t, d, color=cInner, marker='o', markersize=ri*msize,
+        markeredgecolor='black')
+    axLog.plot(t, d, color=cOuter, marker='o', markersize=(ri+ro)*msize,
+        markeredgecolor='black')
+    axLog.plot(t, d, color=cInner, marker='o', markersize=ri*msize,
+        markeredgecolor='black')
+
+    return max(extend, (ri+ro)*msize/2)
 
 def extendAxis(ax, amt, log=False):
     xright = ax.get_xlim()[1]
@@ -366,7 +367,7 @@ def mkAxes(n, cycleLen, plotTitle, colors, log=False):
 
     return fig, axes
 
-def cfgAxes(axes, log=False):
+def cfgAxes(axes, log=False, **kwargs):
     """
     Configure axes settings that must be set after plotting (e.g. because the
     pandas plotting function overwrites them).
@@ -381,6 +382,7 @@ def cfgAxes(axes, log=False):
             ax.set_xlabel("time (seconds)")
         if log:
             ax.set_yscale('symlog')
+            ax.set_ylim(top=kwargs['ymax']*1.5)
             if len(axes) > 1:
                 yticks = ax.get_yticks()
                 ax.set_yticks([yticks[i] for i in range(len(yticks)) if i % 2 == 0])
