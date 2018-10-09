@@ -160,7 +160,15 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
     tmin, tmax = trange
     time = ledgers.index.levels[2]
 
-    # figure out how many peers have a history in this data range
+    colorPairs = [
+        ('magenta', 'black'),
+        ('green', 'orange'),
+        ('blue', 'red')
+    ]
+    colorMap = {}
+    colors = []
+    # figure out how many peers have a history in this data range, and assign colors to each
+    # pair
     pairs = 0
     for user in ledgers.index.levels[0]:
         u = ledgers.loc[user]
@@ -169,39 +177,25 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
                 continue
             p = u.loc[peer]
             if len(p[(tmin <= p.index) & (p.index <= tmax)]) > 0:
-                pairs += 1
+                if (user, peer) not in colorMap:
+                    colors.append(colorPairs[pairs][0])
+                    colorMap[user, peer] = colorPairs[pairs]
+                    colorMap[peer, user] = colorPairs[pairs][::-1]
+                    pairs += 1
+                else:
+                    colors.append(colorMap[peer, user][1])
 
     if kind == 'all':
         # only make a single plot axis
         n = 1
         # the color cycle length is equal to the number of pairs of peers (order matters)
-        cycleLen = pairs
+        cycleLen = pairs * 2
     elif kind == 'pairs':
         # one plot axis for every peer
-        n = pairs // 4
+        n = pairs // 2
         # the color cycle length is equal to the number of pairs of peers (order doesn't
         # matter)
-        cycleLen = pairs // 2
-
-    colorMap = OrderedDict({
-                'magenta' : 'black',
-                'green'   : 'orange',
-                'black'   : 'magenta',
-                'blue'    : 'red',
-                'orange'  : 'green',
-                'red'     : 'blue'
-               })
-    numPairs = 0
-    colors = []
-    i = 0
-    for c1, c2 in colorMap.items():
-        if c2 not in colors:
-            if numPairs < pairs:
-                colors.append(c1)
-                numPairs += 2
-        else:
-            colors.append(c1)
-    colorMap = { c1:c2 for c1, c2 in colorMap.items() if c1 in colors and c2 in colors }
+        cycleLen = pairs
 
     plotTitle = mkTitle(params)
     try:
@@ -254,9 +248,10 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
                     ro = sent / 10 ** int(log10(sent)) if sent > 0 else 0
 
                     msize = 5
-                    ax.plot(t, d, color=colors[c], marker='o', markersize=(ri+ro)*msize,
+                    cInner, cOuter = colorMap[user, peer]
+                    ax.plot(t, d, color=cOuter, marker='o', markersize=(ri+ro)*msize,
                             markeredgecolor='black')
-                    ax.plot(t, d, color=colorMap[colors[c]], marker='o', markersize=ri*msize,
+                    ax.plot(t, d, color=cInner, marker='o', markersize=ri*msize,
                             markeredgecolor='black')
                     extend = max(extend, (ri+ro)*msize/2)
 
@@ -265,9 +260,9 @@ def plot(ledgers, params, kind, trange, outfilePrefix=None):
                     else:
                         dLog = d
 
-                    axLog.plot(t, dLog, color=colors[c],
+                    axLog.plot(t, dLog, color=cOuter,
                                marker='o', markersize=(ri+ro)*msize, markeredgecolor='black')
-                    axLog.plot(t, dLog, color=colorMap[colors[c]],
+                    axLog.plot(t, dLog, color=cInner,
                                marker='o', markersize=ri*msize, markeredgecolor='black')
                     c += 1
             j += 1
