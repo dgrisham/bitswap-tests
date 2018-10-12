@@ -481,6 +481,4 @@ def prependErr(msg, e):
 
 
 if __name__ == '__main__':
-    r = main(sys.argv[1:])
-    ls = r['ledgers']
-    p0, p1, p2 = ls.index.levels[0]
+    main(sys.argv[1:])
