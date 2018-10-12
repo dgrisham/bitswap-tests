@@ -21,51 +21,7 @@ rcParams['axes.titlepad'] = 4
 
 
 def main(argv):
-    cli = argparse.ArgumentParser()
-    rangeArgs = cli.add_mutually_exclusive_group()
-    rangeArgs.add_argument(
-        '-p',
-        '--prange',
-        nargs=2,
-        type=float,
-        help="specify lower and upper time range as percentages of total time",
-    )
-    rangeArgs.add_argument(
-        '-t',
-        '--trange',
-        nargs=2,
-        type=float,
-        help="specify lower and upper time range as literal time values",
-    )
-    cli.add_argument(
-        '-k',
-        '--kind',
-        type=str,
-        choices=['all', 'pairs'],
-        default='all',
-        help="which kind of plot to make",
-    )
-    cli.add_argument(
-        '--no-show',
-        action='store_true',
-        default=False,
-        help="do not show plots",
-    )
-    cli.add_argument(
-        '-s',
-        '--save',
-        action='store_true',
-        default=False,
-        help="save plots",
-    )
-    cli.add_argument(
-        'infile',
-        metavar='<results_file>',
-        type=str,
-        help="json results file to load and plot",
-    )
-    args = cli.parse_args(argv)
-
+    args = cli(argv)
     try:
         results = load(args.infile)
     except Exception as e:
@@ -102,6 +58,56 @@ def main(argv):
         traceback.print_exc()
 
     return results
+
+
+def cli(argv):
+    """
+    Parse CLI args.
+    """
+    parser = argparse.ArgumentParser()
+    rangeArgs = parser.add_mutually_exclusive_group()
+    rangeArgs.add_argument(
+        '-p',
+        '--prange',
+        nargs=2,
+        type=float,
+        help="specify lower and upper time range as percentages of total time",
+    )
+    rangeArgs.add_argument(
+        '-t',
+        '--trange',
+        nargs=2,
+        type=float,
+        help="specify lower and upper time range as literal time values",
+    )
+    parser.add_argument(
+        '-k',
+        '--kind',
+        type=str,
+        choices=['all', 'pairs'],
+        default='all',
+        help="which kind of plot to make",
+    )
+    parser.add_argument(
+        '--no-show',
+        action='store_true',
+        default=False,
+        help="do not show plots",
+    )
+    parser.add_argument(
+        '-s',
+        '--save',
+        action='store_true',
+        default=False,
+        help="save plots as a pdf with the same basename as infile",
+    )
+    parser.add_argument(
+        'infile',
+        metavar='<results_file>',
+        type=str,
+        help="json results file to load and plot",
+    )
+    return parser.parse_args(argv)
 
 
 def load(fname):
@@ -352,6 +358,9 @@ def plotTRange(ledgers, trange, axes, axesLog, kind, **kwargs):
 
 
 def plotCurve(p, trange, i, j, ax, axLog, drstats):
+    """
+    Plot history as a curve from trange[0] to trange[1].
+    """
     factor = 0.25
     xmin, xmax = trange
     ymin, ymax = drstats['min'] - factor * \
@@ -363,6 +372,15 @@ def plotCurve(p, trange, i, j, ax, axLog, drstats):
 
 
 def plotDot(p, user, peer, ax, axLog, colorMap, extend=0):
+    """
+    For a given user, peer pair, plot two concentric circles at the last time
+    user updated their ledger for peer. The inner circle's radius corresponds
+    to the amount of data user had sent peer at that time, and the difference
+    between the outer and inner radii corresponds to the amount of data peer
+    had sent peer at that time. colorMap is a map from (user, peer) pairs to
+    (color, color), where the first color is that of the inner circle and the
+    second is that of the outer circle.
+    """
     inner = p.iloc[[-1]]
     t, d = inner.index[0], inner.iloc[0]['value']
     recv = inner['recv'].item()
