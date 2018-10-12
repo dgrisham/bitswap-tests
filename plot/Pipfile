@@ -15,5 +15,5 @@ numpy = "*"
 python_version = "3.7"
 
 [scripts]
-script = './plot.py'
+main = './plot.py'
 interactive = 'ipython3 -i plot.py --'
