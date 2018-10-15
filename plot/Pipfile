@@ -15,5 +15,5 @@ numpy = "*"
 python_version = "3.7"
 
 [scripts]
-main = './plot.py'
-interactive = 'ipython3 -i plot.py --'
+main = 'src/bitswap_test_plots/app.py'
+interactive = 'ipython3 -i src/bitswap_test_plots/app.py --'
