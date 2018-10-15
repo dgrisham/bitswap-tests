@@ -5,8 +5,9 @@ import sys
 
 import matplotlib.pyplot as plt
 
-from matplotlib import rcParams
 from math import log10
+from collections import OrderedDict
+from matplotlib import rcParams
 
 plt.style.use("ggplot")
 rcParams.update({"figure.autolayout": True})
@@ -275,6 +276,95 @@ def cfgAxes(axes, log=False, **kwargs):
             if len(axes) > 1:
                 yticks = ax.get_yticks()
                 ax.set_yticks([yticks[i] for i in range(len(yticks)) if i % 2 == 0])
+
+
+def mkPlotConfig(ledgers, trange, params, kind):
+    """
+    Get all of the configuration values needed by plot().
+
+    Inputs:
+        -   ledgers (pd.DataFrame)
+        -   trange ((pd.Datetime, pd.Datetime)): Time range to plot
+        -   params (dict): Node parameters as loaded in load().
+        -   kind (str): Which type of plot to configure for. Possible
+            values:
+            -   'all': Plot every peerwise time series of debt ratio values on
+                one plot. This will produce one plot with a line for each pair
+                of peers.
+            -   'pairs': Make one time-series plot for each pair of peers i, j.
+                Each plot will contain two lines: one for user i's view of peer
+                j, and one for j's view of i.
+        Note: Two users are considered 'peers' if at least one of them has a
+        ledger history stored for the other.
+
+    Returns:
+        cfg (dict): Dictionary containing the following keys/values:
+            -   title (str): The plot title.
+            -   num_axes (int): The number of sub-plots to make.
+            -   pairs (int): The number of pairs of peers there are to plot. One for
+                every pair of peers that have a history together.
+            -   cycleLen (int): The length of the color cycle for matplotlib.
+            -   colors ([str]): List of the colors to use in the color cycle.
+            -   colorMap (dict{(str, str): (str, str)}): Dictionary that maps an
+                ordered pair of peers to their corresponding pair of plot colors.
+    """
+
+    paramTitles = OrderedDict()
+    paramTitles["strategy"] = "RF"
+    paramTitles["upload_bandwidth"] = "BW"
+    paramTitles["round_burst"] = "RB"
+    pts = []
+    for p, t in paramTitles.items():
+        vals = params[p]
+        if vals.nunique() == 1:
+            pts.append(f"{t}: {vals[0].title()}")
+        else:
+            pts.append(f"{t}s: {', '.join(vals).title()}")
+    title = f"Debt Ratio vs. Time -- {', '.join(pts)}"
+
+    tmin, tmax = trange
+    colorPairs = [("magenta", "black"), ("green", "orange"), ("blue", "red")]
+    colorMap = {}
+    colors = []
+    # figure out how many peers have a history in this data range, and assign
+    # colors to each pair
+    pairs = 0
+    for user in ledgers.index.levels[0]:
+        u = ledgers.loc[user]
+        for peer in u.index.levels[0]:
+            if user == peer:
+                continue
+            p = u.loc[peer]
+            if len(p[(tmin <= p.index) & (p.index <= tmax)]) > 0:
+                if (user, peer) not in colorMap:
+                    colors.append(colorPairs[pairs][0])
+                    colorMap[user, peer] = colorPairs[pairs]
+                    colorMap[peer, user] = colorPairs[pairs][::-1]
+                    pairs += 1
+                else:
+                    colors.append(colorMap[peer, user][1])
+
+    if kind == "all":
+        # only make a single plot axis
+        n = 1
+        # the color cycle length is equal to the number of pairs of peers
+        # (order matters)
+        cycleLen = pairs * 2
+    elif kind == "pairs":
+        # one plot axis for every peer
+        n = pairs // 2
+        # the color cycle length is equal to the number of pairs of peers
+        # (order doesn't matter)
+        cycleLen = pairs
+
+    return {
+        "title": title,
+        "num_axes": n,
+        "pairs": pairs,
+        "cycleLen": cycleLen,
+        "colors": colors,
+        "colorMap": colorMap,
+    }
 
 
 def warn(msg):
