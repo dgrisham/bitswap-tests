@@ -42,14 +42,10 @@ def run():
     plotCfg = mkPlotConfig(results["ledgers"], trange, results["params"], args.kind)
     try:
         if args.save:
-            plot(
-                results["ledgers"],
-                trange,
-                plotCfg,
-                f"{splitext(args.infile)[0]}-{args.kind}",
-            )
+            plotCfg["fbasename"] = f"{splitext(args.infile)[0]}-{args.kind}"
         else:
-            plot(results["ledgers"], trange, plotCfg)
+            plotCfg["fbasename"] = None
+        plot(results["ledgers"], trange, plotCfg)
         if not args.no_show:
             plt.show()
             plt.clf()
