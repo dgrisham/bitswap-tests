@@ -62,7 +62,7 @@ def cli():
     Parse CLI args.
     """
     parser = argparse.ArgumentParser()
-    rangeArgs = parser.add_mutually_exclusive_group(required=True)
+    rangeArgs = parser.add_mutually_exclusive_group()
     # fmt: off
     rangeArgs.add_argument(
         "-p",

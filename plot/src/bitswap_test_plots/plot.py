@@ -255,10 +255,12 @@ def cfgAxes(axes, log=False, **kwargs):
             ax.set_xlabel("time (seconds)")
         if log:
             ax.set_yscale("symlog")
-            ax.set_ylim(top=kwargs["ymax"] * 1.5)
-            if len(axes) > 1:
-                yticks = ax.get_yticks()
-                ax.set_yticks([yticks[i] for i in range(len(yticks)) if i % 2 == 0])
+            ax.set_ylim(bottom=0, top=kwargs["ymax"] * 1.5)
+            # if len(axes) > 1:
+            #     yticks = ax.get_yticks()
+            #     ax.set_yticks([yticks[i] for i in range(len(yticks)) if i % 2 == 0])
+        else:
+            ax.set_ylim(bottom=0, top=100)
         ax.autoscale(tight=False)
 
 
@@ -278,6 +280,8 @@ def mkPlotConfig(ledgers, trange, params, kind, **kwargs):
             -   'pairs': Make one time-series plot for each pair of peers i, j.
                 Each plot will contain two lines: one for user i's view of peer
                 j, and one for j's view of i.
+        -   kwargs: Keyword args that should be inserted into the returned cfg
+            dict. These will overwrite keys of the same name.
         Note: Two users are considered 'peers' if at least one of them has a
         ledger history stored for the other.
 
@@ -288,7 +292,6 @@ def mkPlotConfig(ledgers, trange, params, kind, **kwargs):
                 This value should be None if the plot should not be saved.
             -   fext (str): Extension to use when saving the plot. Only used if
                 fbasename field is not None.
-            -   fdir (str): Directory to save the plot to.
             -   num_axes (int): The number of sub-plots to make.
             -   pairs (int): The number of pairs of peers there are to plot. One for
                 every pair of peers that have a history together.
@@ -296,6 +299,7 @@ def mkPlotConfig(ledgers, trange, params, kind, **kwargs):
             -   colors ([str]): List of the colors to use in the color cycle.
             -   colorMap (dict{(str, str): (str, str)}): Dictionary that maps an
                 ordered pair of peers to their corresponding pair of plot colors.
+            -   All key/value pairs from kwargs.
     """
 
     paramTitles = OrderedDict()
