@@ -71,12 +71,10 @@ def plot(ledgers, trange, cfg):
         raise prependErr("configuring semi-log axis post-plot", e)
 
     if cfg["fbasename"] is not None:
-        fig.set_tight_layout(False)
         outfile = os.path.join(cfg["fdir"], f"{cfg['fbasename']}{cfg['fext']}")
         fig.savefig(outfile, bbox_inches="tight")
         print(f"saved linear plot to {outfile}")
 
-        figLog.set_tight_layout(False)
         outfileLog = os.path.join(
             cfg["fdir"], f"{cfg['fbasename']}-semilog{cfg['fext']}"
         )
@@ -130,27 +128,9 @@ def plotCurve(p, trange, i, j, ax, axLog, stats):
     """
     Plot history as a curve from trange[0] to trange[1].
     """
-    factor = 0.25
     xmin, xmax = trange
-    ymin, ymax = (
-        stats["min"] - factor * stats["mean"],
-        stats["max"] + factor * stats["mean"],
-    )
-    p.plot(
-        y="value",
-        xlim=(xmin, xmax),
-        ylim=(ymin, ymax),
-        ax=ax,
-        label=f"Debt ratio of {j} wrt {i}",
-    )
-    p.plot(
-        y="value",
-        xlim=(xmin, xmax),
-        logy=True,
-        ax=axLog,
-        label=f"Debt ratio of {j} wrt {i}",
-    )
-    return {"xmin": xmin, "xmax": xmax, "ymin": ymin, "ymax": ymax}
+    p.plot(y="value", ax=ax, label=f"Debt ratio of {j} wrt {i}")
+    p.plot(y="value", logy=True, ax=axLog, label=f"Debt ratio of {j} wrt {i}")
 
 
 def plotDot(p, user, peer, ax, axLog, colorMap, sent_max):
@@ -168,7 +148,6 @@ def plotDot(p, user, peer, ax, axLog, colorMap, sent_max):
     t, d = inner.index[0], inner.iloc[0]["value"]
     recv = inner["recv"].item()
     sent = inner["sent"].item()
-    # TODO: figure out how to nicely scale the marker size
     msize = 10
     ri = msize * recv / 10 ** int(log10(sent_max)) if sent_max > 0 else 0
     ro = ri + msize * sent / 10 ** int(log10(sent_max)) if sent_max > 0 else 0
@@ -193,7 +172,8 @@ def mkAxes(n, cycleLen, plotTitle, colors, log=False):
         [matplotlib.axes]: List containing the `n` axes.
     """
 
-    fig, axes = plt.subplots(n)
+    fig, axes = plt.subplots(n, sharex=True, sharey=True, tight_layout=False)
+    fig.subplots_adjust(hspace=0.5)
     if n == 1:
         axes = [axes]
 
@@ -235,8 +215,6 @@ def mkAxes(n, cycleLen, plotTitle, colors, log=False):
             ax.set_ylabel(ylabel)
             fig.suptitle(plotTitle, **titleArgs)
 
-    fig.subplots_adjust(hspace=0.5)
-
     return fig, axes
 
 
@@ -245,23 +223,14 @@ def cfgAxes(axes, log=False, **kwargs):
     Configure axes settings that must be set after plotting (e.g. because
     the pandas plotting function overwrites them).
     """
-
+    # axes share y axis scale/range settings, so just set on first
+    if log:
+        axes[0].set_yscale("symlog")
+        axes[0].set_ylim(bottom=0)
+    axes[0].autoscale(tight=False)
+    axes[-1].set_xlabel("time (seconds)")
     for i, ax in enumerate(axes):
         ax.legend(prop={"size": "medium"})
-        if i != len(axes) - 1:
-            ax.set_xlabel("")
-            plt.setp(ax.get_xticklabels(), visible=False)
-        else:
-            ax.set_xlabel("time (seconds)")
-        if log:
-            ax.set_yscale("symlog")
-            ax.set_ylim(bottom=0, top=kwargs["ymax"] * 1.5)
-            # if len(axes) > 1:
-            #     yticks = ax.get_yticks()
-            #     ax.set_yticks([yticks[i] for i in range(len(yticks)) if i % 2 == 0])
-        else:
-            ax.set_ylim(bottom=0, top=100)
-        ax.autoscale(tight=False)
 
 
 def mkPlotConfig(ledgers, trange, params, kind, **kwargs):
