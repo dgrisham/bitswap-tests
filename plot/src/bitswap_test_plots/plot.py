@@ -180,20 +180,19 @@ def mkAxes(n, cycleLen, plotTitle, colors, log=False):
     for i, ax in enumerate(axes):
         ax.set_prop_cycle("color", colors[2 * i : 2 * i + cycleLen])
 
+        # if there are multiple plots in this figure, give each one a
+        # unique subtitle
         if n > 1:
-            # if there are multiple plots in this figure, give each one a
-            # unique subtitle
-            title = f"User {i}"
-            axArgs = {
-                "fontsize": "medium",
-                "bbox": {
+            ax.set_title(
+                f"User {i}",
+                fontsize="medium",
+                bbox={
                     "boxstyle": "round",
                     "facecolor": ax.get_facecolor(),
                     "edgecolor": "#000000",
                     "linewidth": 1,
                 },
-            }
-            ax.set_title(title, **axArgs)
+            )
 
         ylabel = "Debt Ratio"
         titleArgs = {
