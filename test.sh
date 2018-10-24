@@ -66,7 +66,6 @@ if ((${#strategies[@]} > 0)); then
         rb=${round_bursts[0]}
         round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
     elif ((${#round_bursts[@]} != num_nodes)); then
-        echo "${round_bursts[@]}"
         echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes" >&2
         exit 1
     fi
