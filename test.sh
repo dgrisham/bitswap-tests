@@ -2,7 +2,13 @@
 
 # set -ex
 
-while getopts "t::n:f:d:b:r:s:" opt; do
+usage="\
+./test.sh [-h] -t TEST_NUM -n NUM_NODES -f FILE_CMD
+          -b [UPLOAD_BANDWIDTH [UPLOAD_BANDWIDTH ...]]
+          -r [ROUND_BURST [ROUND_BURST ...]] -s [STRATEGY [STRATEGY ...]]
+          [-d RESULTS_DIR]"
+
+while getopts "t::n:f:d:b:r:s:h" opt; do
     case $opt in
         t)
             test_num="$OPTARG"
@@ -20,13 +26,17 @@ while getopts "t::n:f:d:b:r:s:" opt; do
             IFS=' ' read -r -a round_bursts <<< "$OPTARG"
             ;;
         s)
-            IFS=' ' read -r -a strategies <<< "$OPTARG"
+            IFS=' ' read -r -a strategies <<< "${OPTARG}"
             ;;
         d)
             results_dir="$OPTARG"
             ;;
+        h)
+            echo "$usage"
+            exit 0
+            ;;
         *)
-            echo "usage..." >&2
+            echo "$usage" >&2
             exit 1
             ;;
         --)
@@ -36,9 +46,14 @@ while getopts "t::n:f:d:b:r:s:" opt; do
 done
 shift $((OPTIND-1))
 
+if [[ -z "$test_num" || -z "$num_nodes" || -z "$file_cmd" ]]; then
+    echo "missing required arguments" >&2
+    echo "$usage" >&2
+    exit 1
+fi
+
 # post-process args
 
-declare -A jq_args
 if ((${#strategies[@]} > 0)); then
     if ((${#strategies[@]} == 1)); then
         s=${strategies[0]}
@@ -51,10 +66,12 @@ if ((${#strategies[@]} > 0)); then
         rb=${round_bursts[0]}
         round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
     elif ((${#round_bursts[@]} != num_nodes)); then
+        echo "${round_bursts[@]}"
         echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes" >&2
         exit 1
     fi
 fi
+
 
 if ((${#bw_dist[@]} > 0)); then
     if ((${#bw_dist[@]} == 1)); then

@@ -1,25 +1,29 @@
 #!/bin/sh
 
-while getopts ":i:n:f:u:d:" opt; do
+usage="\
+./set_rate.sh [-h] -n NODE_NUM -f INTERFACE_NUM -u EXT_INTERFACE
+              [-i NUM_INTERFACES]"
+
+while getopts "n:f:u:i:h" opt; do
     case $opt in
-        i)
-            [[ -z "$OPTARG" ]] && exit 1
-            num_interfaces="$OPTARG"
-            ;;
         n)
-            [[ -z "$OPTARG" ]] && exit 1
             node_num="$OPTARG"
             ;;
         f)
-            [[ -z "$OPTARG" ]] && exit 1
             ifnum="$OPTARG"
             ;;
         u)
-            [[ -z "$OPTARG" ]] && exit 1
             ext_up="$OPTARG"
             ;;
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
+        i)
+            num_interfaces="$OPTARG"
+            ;;
+        h)
+            echo "$usage"
+            exit 0
+            ;;
+        *)
+            echo "$usage" >&2
             exit 1
             ;;
         --)
@@ -28,6 +32,12 @@ while getopts ":i:n:f:u:d:" opt; do
     esac
 done
 shift $((OPTIND-1))
+
+if [[ -z "$node_num" || -z "$ifnum" || -z "$ext_up" ]]; then
+    echo "missing required argument(s)" >&2
+    echo "$usage" >&2
+    exit 1
+fi
 
 ext=$(iptb attr get $node_num ifname)
 [[ -z "$ext" ]] && exit 1
