@@ -5,39 +5,28 @@
 while getopts "t::n:f:d:b:r:s:" opt; do
     case $opt in
         t)
-            [[ -z "$OPTARG" ]] && exit 1
             test_num="$OPTARG"
             ;;
         n)
-            [[ -z "$OPTARG" ]] && exit 1
             num_nodes="$OPTARG"
             ;;
         f)
-            [[ -z "$OPTARG" ]] && exit 1
             file_cmd="$OPTARG"
             ;;
         b)
-            [[ -z "$OPTARG" ]] && exit 1
             IFS=' ' read -r -a bw_dist <<< "$OPTARG"
             ;;
         r)
-            [[ -z "$OPTARG" ]] && exit 1
             IFS=' ' read -r -a round_bursts <<< "$OPTARG"
             ;;
         s)
-            [[ -z "$OPTARG" ]] && exit 1
-            IFS=' ' read -r -a strategies <<< "${OPTARG}"
+            IFS=' ' read -r -a strategies <<< "$OPTARG"
             ;;
         d)
-            [[ -z "$OPTARG" ]] && exit 1
             results_dir="$OPTARG"
             ;;
-        \?)
-            echo "Invalid option: -$OPTARG" >&2
-            exit 1
-            ;;
-        :)
-            echo "Option -$OPTARG requires an argument." >&2
+        *)
+            echo "usage..." >&2
             exit 1
             ;;
         --)
@@ -55,25 +44,24 @@ if ((${#strategies[@]} > 0)); then
         s=${strategies[0]}
         strategies=($(for ((i=0; i < $num_nodes; i++)); do echo "$s"; done))
     elif ((${#strategies[@]} != num_nodes)); then
-        echo "error: specified ${#strategies[@]} strategies. should be 0, 1 or $num_nodes"
+        echo "error: specified ${#strategies[@]} strategies. should be 0, 1 or $num_nodes" >&2
         exit 1
     fi
     if ((${#round_bursts[@]} == 1)); then
         rb=${round_bursts[0]}
         round_bursts=($(for ((i=0; i < $num_nodes; i++)); do echo $rb; done))
     elif ((${#round_bursts[@]} != num_nodes)); then
-        echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes"
+        echo "error: specified ${#round_bursts[@]} round lengths. should be 1 or $num_nodes" >&2
         exit 1
     fi
 fi
-
 
 if ((${#bw_dist[@]} > 0)); then
     if ((${#bw_dist[@]} == 1)); then
         bw=${bw_dist[0]}
         bw_dist=($(for ((i=0; i < $num_nodes; i++)); do echo $bw; done))
     elif ((${#bw_dist[@]} != num_nodes)); then
-        echo "error: specified ${#bw_dist[@]} upload bandwidth values. should be 0, 1 or $num_nodes"
+        echo "error: specified ${#bw_dist[@]} upload bandwidth values. should be 0, 1 or $num_nodes" >&2
         exit 1
     fi
 fi
@@ -83,7 +71,7 @@ source "tests/test-$test_num.sh"
 yes | iptb auto --type dockeripfs --count $num_nodes >/dev/null
 iptb start --wait
 
-results_prefix="results/$test_num/$results_dir/"
+results_prefix="$results_dir/"
 mkdir -p "$results_prefix"
 
 if [[ -v strategies[@] ]]; then
@@ -185,3 +173,5 @@ outfile="${results_prefix%?}.json"
 rm -f $outfile
 jq -s '.' ${results_prefix}ledgers_* > $outfile
 rm -f ${results_prefix}ledgers_*
+
+echo "Saved results to: $outfile"
