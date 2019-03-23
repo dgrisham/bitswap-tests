@@ -1,0 +1,176 @@
+[
+  {
+    "id": "QmaN7yUvWQVqfQ5BzpVJYQ49aQkzBHzHgc73mx6BDFiw6G",
+    "strategy": "identity",
+    "round_burst": "500",
+    "upload_bandwidth": "10000",
+    "uploads": [
+      {
+        "cid": "QmSPkyaSLKBDp4G9CL1NAk7zj3DSFgNsCp8ZxdWHadWgDK"
+      },
+      {
+        "cid": "QmbdzKTvkzvGRXewfAY6uf4vKzwJx67b5fhkySkiwP8Zo9"
+      }
+    ],
+    "dl_times": [
+      {
+        "block": "QmVrjzx1j719aHE9Am6UEduowfonXbvXCP2TewGgdexK9F",
+        "time": "0s"
+      },
+      {
+        "block": "QmVCFmcRo87uQGGe62KjigabfrHPwTAx8RfH8HAmakNuRk",
+        "time": "0s"
+      }
+    ],
+    "history": [
+      {
+        "event": "Receive",
+        "peer": "QmTqxdL9zCcLsC2CG1Vb5DcSPN6bHLqPUHaJa3L7mj1Nv3",
+        "time": "2018-10-24T20:38:40.837910491Z",
+        "sent": 0,
+        "recv": 1011,
+        "value": 1011
+      },
+      {
+        "event": "Receive",
+        "peer": "QmTSXGdxqefpFHfQJp8P9LwqoZsEkQpG5XYEF2WS8EgM3H",
+        "time": "2018-10-24T20:38:41.30673776Z",
+        "sent": 0,
+        "recv": 1011,
+        "value": 1011
+      },
+      {
+        "event": "Send",
+        "peer": "QmTqxdL9zCcLsC2CG1Vb5DcSPN6bHLqPUHaJa3L7mj1Nv3",
+        "time": "2018-10-24T20:38:41.847939993Z",
+        "sent": 1011,
+        "recv": 1011,
+        "value": 0.9990118577075099
+      },
+      {
+        "event": "Send",
+        "peer": "QmTSXGdxqefpFHfQJp8P9LwqoZsEkQpG5XYEF2WS8EgM3H",
+        "time": "2018-10-24T20:38:42.742684891Z",
+        "sent": 1011,
+        "recv": 1011,
+        "value": 0.9990118577075099
+      }
+    ]
+  },
+  {
+    "id": "QmTqxdL9zCcLsC2CG1Vb5DcSPN6bHLqPUHaJa3L7mj1Nv3",
+    "strategy": "identity",
+    "round_burst": "500",
+    "upload_bandwidth": "10000",
+    "uploads": [
+      {
+        "cid": "QmVrjzx1j719aHE9Am6UEduowfonXbvXCP2TewGgdexK9F"
+      },
+      {
+        "cid": "QmRfv18yEoRpgdRDa6GR4FYs9kPBPPv7r2cisUSjgZ5s2o"
+      }
+    ],
+    "dl_times": [
+      {
+        "block": "QmSPkyaSLKBDp4G9CL1NAk7zj3DSFgNsCp8ZxdWHadWgDK",
+        "time": "0s"
+      },
+      {
+        "block": "QmfXAFhwPCdQRUvzcXBaMcugDF1Wfadwu2aSmP7WngrQGU",
+        "time": "0s"
+      }
+    ],
+    "history": [
+      {
+        "event": "Send",
+        "peer": "QmaN7yUvWQVqfQ5BzpVJYQ49aQkzBHzHgc73mx6BDFiw6G",
+        "time": "2018-10-24T20:38:40.83753792Z",
+        "sent": 1011,
+        "recv": 0,
+        "value": 0
+      },
+      {
+        "event": "Receive",
+        "peer": "QmaN7yUvWQVqfQ5BzpVJYQ49aQkzBHzHgc73mx6BDFiw6G",
+        "time": "2018-10-24T20:38:41.848878061Z",
+        "sent": 1011,
+        "recv": 1011,
+        "value": 0.9990118577075099
+      },
+      {
+        "event": "Receive",
+        "peer": "QmTSXGdxqefpFHfQJp8P9LwqoZsEkQpG5XYEF2WS8EgM3H",
+        "time": "2018-10-24T20:38:42.198548577Z",
+        "sent": 0,
+        "recv": 1011,
+        "value": 1011
+      },
+      {
+        "event": "Send",
+        "peer": "QmTSXGdxqefpFHfQJp8P9LwqoZsEkQpG5XYEF2WS8EgM3H",
+        "time": "2018-10-24T20:38:43.122035733Z",
+        "sent": 1011,
+        "recv": 1011,
+        "value": 0.9990118577075099
+      }
+    ]
+  },
+  {
+    "id": "QmTSXGdxqefpFHfQJp8P9LwqoZsEkQpG5XYEF2WS8EgM3H",
+    "strategy": "identity",
+    "round_burst": "500",
+    "upload_bandwidth": "10000",
+    "uploads": [
+      {
+        "cid": "QmVCFmcRo87uQGGe62KjigabfrHPwTAx8RfH8HAmakNuRk"
+      },
+      {
+        "cid": "QmfXAFhwPCdQRUvzcXBaMcugDF1Wfadwu2aSmP7WngrQGU"
+      }
+    ],
+    "dl_times": [
+      {
+        "block": "QmbdzKTvkzvGRXewfAY6uf4vKzwJx67b5fhkySkiwP8Zo9",
+        "time": "0s"
+      },
+      {
+        "block": "QmRfv18yEoRpgdRDa6GR4FYs9kPBPPv7r2cisUSjgZ5s2o",
+        "time": "0s"
+      }
+    ],
+    "history": [
+      {
+        "event": "Send",
+        "peer": "QmaN7yUvWQVqfQ5BzpVJYQ49aQkzBHzHgc73mx6BDFiw6G",
+        "time": "2018-10-24T20:38:41.306124171Z",
+        "sent": 1011,
+        "recv": 0,
+        "value": 0
+      },
+      {
+        "event": "Send",
+        "peer": "QmTqxdL9zCcLsC2CG1Vb5DcSPN6bHLqPUHaJa3L7mj1Nv3",
+        "time": "2018-10-24T20:38:42.197670943Z",
+        "sent": 1011,
+        "recv": 0,
+        "value": 0
+      },
+      {
+        "event": "Receive",
+        "peer": "QmaN7yUvWQVqfQ5BzpVJYQ49aQkzBHzHgc73mx6BDFiw6G",
+        "time": "2018-10-24T20:38:42.745045269Z",
+        "sent": 1011,
+        "recv": 1011,
+        "value": 0.9990118577075099
+      },
+      {
+        "event": "Receive",
+        "peer": "QmTqxdL9zCcLsC2CG1Vb5DcSPN6bHLqPUHaJa3L7mj1Nv3",
+        "time": "2018-10-24T20:38:43.122395948Z",
+        "sent": 1011,
+        "recv": 1011,
+        "value": 0.9990118577075099
+      }
+    ]
+  }
+]

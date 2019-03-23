@@ -1,0 +1,4 @@
+{"event":"Bitswap.DebtRatioUpdatedOnReceive","exchanged":1,"peer":"QmSzzpirwTfbWTyMchfJkZdZdsFKrxatHKoJxNRCMqqNiy","recv":1011,"sent":0,"system":"engine","time":"2018-10-24T20:38:10.068018896Z","value":1011}
+{"event":"Bitswap.DebtRatioUpdatedOnReceive","exchanged":1,"peer":"QmYAWQvNhgepajhfCYbttb22wHFNZMZq6qqURbkA7n8vA9","recv":1011,"sent":0,"system":"engine","time":"2018-10-24T20:38:10.495278588Z","value":1011}
+{"event":"Bitswap.DebtRatioUpdatedOnSend","exchanged":2,"peer":"QmSzzpirwTfbWTyMchfJkZdZdsFKrxatHKoJxNRCMqqNiy","recv":1011,"sent":1011,"session":"4adaf472-f20c-4a0f-b8c2-776d7cdd5a7b","system":"engine","time":"2018-10-24T20:38:10.964806636Z","value":0.9990118577075099}
+{"event":"Bitswap.DebtRatioUpdatedOnSend","exchanged":2,"peer":"QmYAWQvNhgepajhfCYbttb22wHFNZMZq6qqURbkA7n8vA9","recv":1011,"sent":1011,"session":"4adaf472-f20c-4a0f-b8c2-776d7cdd5a7b","system":"engine","time":"2018-10-24T20:38:11.843990001Z","value":0.9990118577075099}
