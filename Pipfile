@@ -1,0 +1,3 @@
+[scripts]
+main = './src/bitswap_tests/app.py'
+interactive = 'ipython3 -i src/bitswap_tests/app.py'

@@ -10,29 +10,62 @@ def app():
     args = cli()
     n = args.num_nodes
     strategies = args.strategies
-    dpr = strategies.dpr
+    upload_rates = args.upload_rates
+    dpr = args.dpr
+
+    # create and start iptb nodes
     subprocess.run(
-        f"yes | iptb auto --type dockeripfs --count {n} >/dev/null".split(" ")
+        f"iptb auto --type dockeripfs --count {n} --force >/dev/null".split(" ")
     )
     subprocess.run(["iptb", "start", "--wait"])
 
+    # modify ipfs configs to use/configure strategies
     strats_stdin = ""
     for i in range(n):
+        if strategies is not None:
+            strats_stdin += f'{i} -- ipfs config --json -- Experimental.BitswapStrategy "{strategies[i]}"\n'
         strats_stdin += (
-            f'{n} -- ipfs config --json -- Experimental.BitswapStrategy "{strategies[n]}"'
-            + f"{n} -- ipfs config --json -- Experimental.BitswapRRQRoundBurst {dpr[n]}"
+            f"{i} -- ipfs config --json -- Experimental.BitswapRRQRoundBurst {dpr[i]}\n"
         )
     try:
-        subprocess.run(
-            ["iptb", "run", ">/dev/null"],
-            input=strats_stdin.encode(),
-            stdin=subprocess.PIPE,
-            check=True,
-        )
+        print(f"strats_stdin: {strats_stdin}")
+        subprocess.run(["iptb", "run"], input=strats_stdin.encode(), check=True)
     except subprocess.CalledProcessError as e:
         print(
             f"error setting strategies and/or round bursts: {e.output}", file=sys.stderr
         )
+        return 1
+
+    # TODO: everything below this line has yet to be tested (or ran at all)
+    if upload_rates is not None:
+        ifnum = 0
+        set_rate_bin = "../../deprecated/bin/set_rate.sh"
+        try:
+            subprocess.run(f"{set_rate_bin} -i {n}".split(" "), check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"error initializing IFBs: {e.output}", file=sys.stderr)
+        for i, u in enumerate(upload_rates):
+            if u != -1:
+                try:
+                    subprocess.run(
+                        f"{set_rate_bin} -n {i} -f {ifnum} -u {u}".split(" "),
+                        check=True,
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(f"error initializing IFBs: {e.output}", file=sys.stderr)
+                ifnum += 1
+
+    # TODO: clean this up/better variable name/etc.
+    cmd = "docker exec --detach $(iptb attr get $i container) script -c 'trap \"exit\" SIGTERM; ipfs log tail | grep DebtRatio' ipfs_log".split(
+        " "
+    )
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"error starting log workers: {e.output}", file=sys.stderr)
+
+    # success!
+    return 0
 
 
 def cli():
@@ -87,14 +120,19 @@ def cli():
 
     args = cli.parse_args()
     n = args.num_nodes
-    if args.upload_rates != n:
-        print(f"{len(args.upload_rates)} passed, should be {n}", file=sys.stderr)
+    if len(args.dpr) != n:
+        print(f"{len(args.dpr)} DPR values passed, should be {n}", file=sys.stderr)
         exit(1)
-    if args.dpr != n:
-        print(f"{len(args.dpr)} passed, should be {n}", file=sys.stderr)
+    if args.strategies is not None and len(args.strategies) != n:
+        print(
+            f"{len(args.strategies)} strategies passed, should be {n}", file=sys.stderr
+        )
         exit(1)
-    if args.strategies != n:
-        print(f"{len(args.strategies)} passed, should be {n}", file=sys.stderr)
+    if args.upload_rates is not None and len(args.upload_rates) != n:
+        print(
+            f"{len(args.upload_rates)} upload rates passed, should be {n}",
+            file=sys.stderr,
+        )
         exit(1)
 
     return args

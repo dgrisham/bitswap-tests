@@ -39,17 +39,18 @@ if [[ -z "$node_num" || -z "$ifnum" || -z "$ext_up" ]]; then
     exit 1
 fi
 
-ext=$(iptb attr get $node_num ifname)
-[[ -z "$ext" ]] && exit 1
-# each interfaces gets its own rate limiter
-ifb="ifb$ifnum"
-
 if [[ -n "$num_interfaces" ]]; then
     [[ ! -z $(lsmod | grep ifb) ]] && sudo modprobe -r ifb
     sudo modprobe ifb numifbs=$num_interfaces
     sudo modprobe sch_fq_codel
     sudo modprobe act_mirred
+    exit 0
 fi
+
+ext=$(iptb attr get $node_num ifname)
+[[ -z "$ext" ]] && exit 1
+# each interfaces gets its own rate limiter
+ifb="ifb$ifnum"
 
 # clear old queuing disciplines
 tc qdisc del dev $ext root || true

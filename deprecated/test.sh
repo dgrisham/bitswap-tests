@@ -133,7 +133,7 @@ for ((i=0; i< num_nodes; i++)); do
 done
 
 # background processes to gather log files
-for ((i=0; i< num_nodes; i++)); do
+for ((i=0; i < num_nodes; i++)); do
     docker exec --detach $(iptb attr get $i container) script -c 'trap "exit" SIGTERM; ipfs log tail | grep DebtRatio' ipfs_log
 done
 
