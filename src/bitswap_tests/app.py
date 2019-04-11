@@ -53,16 +53,36 @@ def app():
                     )
                 except subprocess.CalledProcessError as e:
                     print(f"error initializing IFBs: {e.output}", file=sys.stderr)
+                    return 1
                 ifnum += 1
 
-    # TODO: clean this up/better variable name/etc.
-    cmd = "docker exec --detach $(iptb attr get $i container) script -c 'trap \"exit\" SIGTERM; ipfs log tail | grep DebtRatio' ipfs_log".split(
-        " "
-    )
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"error starting log workers: {e.output}", file=sys.stderr)
+    for i in range(n):
+        idCmd = ["iptb", "attr", "get", f"{i}", "container"]
+        try:
+            idCmdResult = subprocess.check_output(idCmd)
+        except subprocess.CalledProcessError as e:
+            print(f"error getting container ID: {e.output}", file=sys.stderr)
+            return 1
+        try:
+            containerID = idCmdResult.decode().strip()
+        except bytes.UnicodeError as e:
+            print(f"error decoding command output: {e.output}", file=sys.stderr)
+
+        logCmd = [
+            "docker",
+            "exec",
+            "--detach",
+            containerID,
+            "script",
+            "-c",
+            "trap exit SIGTERM; ipfs log tail | grep DebtRatio",
+            "ipfs_log",
+        ]
+        try:
+            subprocess.run(logCmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"error starting log workers: {e.output}", file=sys.stderr)
+            return 1
 
     # success!
     return 0
